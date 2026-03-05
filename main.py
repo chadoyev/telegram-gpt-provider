@@ -840,15 +840,121 @@ def get_interface(user_id, interface):
         if interface == 'photo_gpt':
             return use_gpt4_en
 
-# Общение с БД
-conn = psycopg2.connect(
-    host=host,
-    user=user,
-    password=password,
-    database=db
-)
-conn.autocommit = True
-cursor = conn.cursor()
+def init_db():
+    """
+    Автоматическое создание/инициализация БД при запуске.
+    Подходит для первого старта: создаёт таблицы, если их ещё нет.
+    """
+    global conn, cursor
+    conn = psycopg2.connect(
+        host=host,
+        user=user,
+        password=password,
+        database=db
+    )
+    conn.autocommit = True
+    cursor = conn.cursor()
+
+    # создаём таблицы, если их нет
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT UNIQUE NOT NULL,
+        user_name TEXT NOT NULL,
+        user_surname TEXT,
+        username TEXT,
+        date_reg TIMESTAMP NOT NULL,
+        terms_of_use BOOLEAN DEFAULT FALSE,
+        status_chat BOOLEAN DEFAULT FALSE,
+        reffer BIGINT DEFAULT 0,
+        balance INTEGER DEFAULT 0,
+        balance_bonus INTEGER DEFAULT 0,
+        subscribe_expiration TIMESTAMP DEFAULT NULL,
+        language TEXT DEFAULT NULL,
+        country TEXT DEFAULT NULL,
+        pay TEXT DEFAULT '0',
+        status_subscribe BOOLEAN DEFAULT FALSE
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS history_question_answer (
+        user_id BIGINT NOT NULL,
+        id_chat INTEGER NOT NULL,
+        question TEXT,
+        answer TEXT,
+        message_id TEXT NOT NULL,
+        date_time TIMESTAMP,
+        status_chat BOOLEAN DEFAULT FALSE,
+        spending TEXT,
+        model TEXT,
+        free_api BOOLEAN,
+        photo_user TEXT,
+        voice_user TEXT,
+        photo_bot TEXT,
+        voice_bot TEXT
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS history_question_answer_admin (
+        user_id BIGINT NOT NULL,
+        id_chat INTEGER NOT NULL,
+        question TEXT,
+        answer TEXT,
+        message_id TEXT NOT NULL,
+        date_time TIMESTAMP,
+        status_chat BOOLEAN DEFAULT FALSE,
+        spending TEXT,
+        model TEXT,
+        free_api BOOLEAN,
+        photo_user TEXT,
+        voice_user TEXT,
+        photo_bot TEXT,
+        voice_bot TEXT
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS transactions_history (
+        id SERIAL PRIMARY KEY,
+        user_id BIGINT NOT NULL,
+        type INTEGER NOT NULL,
+        merchant_order_id BIGINT UNIQUE,
+        amount INTEGER NOT NULL,
+        currency TEXT NOT NULL,
+        date_payment TIMESTAMP NOT NULL,
+        status BOOLEAN DEFAULT FALSE,
+        pay_message TEXT,
+        referal BIGINT,
+        chat_number INTEGER
+    );
+    """)
+
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS settings (
+        id SERIAL PRIMARY KEY,
+        status BOOLEAN DEFAULT TRUE,
+        tokens INTEGER DEFAULT 2000,
+        temperature INTEGER DEFAULT 1,
+        total_blocked INTEGER DEFAULT 0,
+        reffer_bonus TEXT DEFAULT '0',
+        referal_bonus TEXT DEFAULT '0',
+        cashback INTEGER DEFAULT 0,
+        pay1 TEXT DEFAULT '0 - 0 - 0 - 0',
+        pay2 TEXT DEFAULT '0 - 0 - 0 - 0',
+        pay3 TEXT DEFAULT '0 - 0 - 0 - 0',
+        pay4 TEXT DEFAULT '0 - 0 - 0 - 0',
+        subscribe1 TEXT,
+        subscribe2 TEXT,
+        subscribe3 TEXT,
+        subscribe4 TEXT
+    );
+    """)
+
+
+# инициализируем соединение и таблицы при старте
+init_db()
 
 def db_insert_users(user_id: int, user_name: str, user_surname: str, username: str, refferer: int, date_reg):
     cursor.execute(

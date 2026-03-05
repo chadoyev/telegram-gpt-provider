@@ -8,3 +8,8 @@ __pycache__/
 
 users/
 *.log
+
+# локальные базы и дампы
+db.db
+db_uai.sql
+db_uai1.json
