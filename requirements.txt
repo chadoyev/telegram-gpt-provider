@@ -1,0 +1,10 @@
+telebot
+Flask
+openai
+psycopg2-binary
+requests
+yookassa
+tiktoken
+mutagen
+schedule
+python-dotenv

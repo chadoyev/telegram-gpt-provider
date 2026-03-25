@@ -1,0 +1,25 @@
+venv/
+.env
+__pycache__/
+*.pyc
+
+.idea/
+.vscode/
+
+users/
+*.log
+
+# локальные базы и дампы
+*.db
+db_uai.sql
+db_uai1.json
+
+# SSL/TLS
+*.key
+*.crt
+*.pem
+
+# архивы и бэкапы
+*.zip
+*.tar.gz
+*.rar
