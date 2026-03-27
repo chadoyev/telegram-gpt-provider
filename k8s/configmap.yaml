@@ -10,4 +10,5 @@ data:
   DB_USER: "postgres"
   WEBHOOK_HOST: "0.0.0.0"
   WEBHOOK_PORT: "8443"
+  WEBHOOK_BASE_URL: "https://your-domain.com"
   MESSAGES_DIR: "/app/users"

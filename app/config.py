@@ -29,7 +29,6 @@ class TelegramConfig:
 @dataclass(frozen=True)
 class OpenAIConfig:
     api_key: str = field(default_factory=lambda: _env("OPENAI_API_KEY", required=True))
-    base_url: str = field(default_factory=lambda: _env("OPENAI_API_BASE", "https://api.openai.com/v1"))
     default_model: str = "gpt-5.4-mini"
     premium_model: str = "gpt-5.4"
     image_model: str = "gpt-image-1.5"
@@ -86,8 +85,8 @@ class Settings:
     messages_dir: str = field(default_factory=lambda: _env("MESSAGES_DIR", "users"))
     webhook_port: int = field(default_factory=lambda: int(_env("WEBHOOK_PORT", "8443")))
     webhook_host: str = field(default_factory=lambda: _env("WEBHOOK_HOST", "0.0.0.0"))
-    ssl_cert: str = field(default_factory=lambda: _env("SSL_CERT", ""))
-    ssl_key: str = field(default_factory=lambda: _env("SSL_KEY", ""))
+    webhook_base_url: str = field(default_factory=lambda: _env("WEBHOOK_BASE_URL", required=True))
+    webhook_secret: str = field(default_factory=lambda: _env("WEBHOOK_SECRET", ""))
 
 
 settings = Settings()

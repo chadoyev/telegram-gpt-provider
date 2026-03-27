@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import ssl
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
-from aiogram.enums import ParseMode  # noqa: F401
+from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 
 from app import db
 from app.config import settings
@@ -22,6 +22,23 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 log = logging.getLogger("uai_robot")
+
+TELEGRAM_WEBHOOK_PATH = "/tg"
+
+
+async def on_startup(bot: Bot) -> None:
+    webhook_url = f"{settings.webhook_base_url}{TELEGRAM_WEBHOOK_PATH}"
+    await bot.set_webhook(
+        webhook_url,
+        secret_token=settings.webhook_secret,
+        drop_pending_updates=True,
+    )
+    log.info("Telegram webhook set: %s", webhook_url)
+
+
+async def on_shutdown(bot: Bot) -> None:
+    await bot.delete_webhook()
+    log.info("Telegram webhook removed")
 
 
 async def main() -> None:
@@ -50,34 +67,33 @@ async def main() -> None:
         chat.router,
     )
 
-    webhook_app = create_webhook_app(bot)
+    dp.startup.register(on_startup)
+    dp.shutdown.register(on_shutdown)
 
-    runner = web.AppRunner(webhook_app)
+    app = create_webhook_app(bot)
+
+    tg_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+        secret_token=settings.webhook_secret,
+    )
+    tg_handler.register(app, path=TELEGRAM_WEBHOOK_PATH)
+
+    runner = web.AppRunner(app)
     await runner.setup()
 
-    ssl_context = None
-    if settings.ssl_cert and settings.ssl_key:
-        ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        ssl_context.load_cert_chain(settings.ssl_cert, settings.ssl_key)
-
-    site = web.TCPSite(
-        runner,
-        host=settings.webhook_host,
-        port=settings.webhook_port,
-        ssl_context=ssl_context,
-    )
+    site = web.TCPSite(runner, host=settings.webhook_host, port=settings.webhook_port)
     await site.start()
     log.info(
-        "Payment webhook server started on %s:%s (SSL: %s)",
+        "Webhook server started on %s:%s",
         settings.webhook_host,
         settings.webhook_port,
-        bool(ssl_context),
     )
 
-    log.info("Bot starting polling...")
     try:
-        await dp.start_polling(bot)
+        await asyncio.Event().wait()
     finally:
+        await dp.emit_shutdown()
         await runner.cleanup()
         await db.close_pool()
         await bot.session.close()

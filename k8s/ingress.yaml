@@ -36,6 +36,13 @@ spec:
                 name: uai-robot-bot
                 port:
                   number: 8443
+          - path: /tg
+            pathType: Exact
+            backend:
+              service:
+                name: uai-robot-bot
+                port:
+                  number: 8443
           - path: /health
             pathType: Exact
             backend:

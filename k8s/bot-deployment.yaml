@@ -17,8 +17,8 @@ spec:
     spec:
       containers:
         - name: bot
-          image: uai-robot:latest
-          imagePullPolicy: IfNotPresent
+          image: chadoyev/uai-robot:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 8443
               name: webhooks

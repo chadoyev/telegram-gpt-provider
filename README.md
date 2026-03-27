@@ -28,7 +28,7 @@
 | Язык          | Python 3.12+                                      |
 | Telegram      | aiogram 3.26 (async, Bot API 9.5)                 |
 | OpenAI        | openai 2.30 — Responses API (streaming, файлы, vision) |
-| Web           | aiohttp (вебхуки для платёжных коллбэков)         |
+| Web           | aiohttp (Telegram webhook + платёжные коллбэки)   |
 | База данных   | PostgreSQL 16 + asyncpg                           |
 | Платежи       | FreeKassa, Robokassa, YooKassa                    |
 | Аудио         | FFmpeg (OGG ↔ MP3)                                |
@@ -42,7 +42,7 @@
 uai_robot/
 ├── app/
 │   ├── __init__.py
-│   ├── __main__.py          # точка входа: бот + webhook-сервер
+│   ├── __main__.py          # точка входа: Telegram webhook + aiohttp
 │   ├── config.py             # конфигурация из env
 │   ├── db.py                 # asyncpg: подключение, запросы
 │   ├── billing.py            # биллинг, валюты, списание
@@ -101,12 +101,14 @@ cp .env.example .env
 
 Обязательные переменные:
 
-| Переменная     | Описание                          |
-| -------------- | --------------------------------- |
-| `API_TOKEN`    | Токен Telegram-бота от @BotFather |
-| `ADMIN_ID`     | Ваш Telegram ID                   |
-| `OPENAI_API_KEY` | API-ключ OpenAI                 |
-| `DB_PASSWORD`  | Пароль PostgreSQL                  |
+| Переменная         | Описание                                        |
+| ------------------ | ----------------------------------------------- |
+| `API_TOKEN`        | Токен Telegram-бота от @BotFather               |
+| `ADMIN_ID`         | Ваш Telegram ID                                 |
+| `OPENAI_API_KEY`   | API-ключ OpenAI                                 |
+| `DB_PASSWORD`      | Пароль PostgreSQL                                |
+| `WEBHOOK_BASE_URL` | Публичный HTTPS-URL сервера (напр. `https://bot.example.com`) |
+| `WEBHOOK_SECRET`   | Секретный токен для верификации webhook          |
 
 ### 3. Запустить
 
@@ -120,7 +122,7 @@ docker compose up -d
 
 ```bash
 docker compose logs -f bot
-# Должно быть: "Bot starting polling..."
+# Должно быть: "Webhook server started on 0.0.0.0:8443" и "Telegram webhook set: ..."
 ```
 
 ---
@@ -164,13 +166,10 @@ python -m app
 
 ## Деплой в Kubernetes
 
-### 1. Собрать Docker-образ
+### 1. Получить Docker-образ
 
 ```bash
-docker build -t uai-robot:latest .
-# Или запушить в реестр:
-# docker tag uai-robot:latest your-registry/uai-robot:latest
-# docker push your-registry/uai-robot:latest
+docker pull chadoyev/uai-robot:latest
 ```
 
 ### 2. Настроить секреты
@@ -202,7 +201,7 @@ HPA настроен на:
 - 1–10 реплик
 - Скейл по CPU (70%) и памяти (80%)
 
-> **Важно:** При использовании polling Telegram допускает только одну активную сессию. Для горизонтального масштабирования переключитесь на webhook-режим Telegram (вместо polling).
+Бот работает через Telegram Webhook, поэтому горизонтальное масштабирование работает из коробки.
 
 ---
 
@@ -258,7 +257,6 @@ HPA настроен на:
 | `ADMIN_ID`          | Да           | 0                    | Telegram ID администратора       |
 | `PASSWORD_ADMIN`    | Нет          | Admin                | Пароль для админ-панели          |
 | `OPENAI_API_KEY`    | Да           | —                    | API-ключ OpenAI                  |
-| `OPENAI_API_BASE`   | Нет          | https://api.openai.com/v1 | Base URL API              |
 | `DB_HOST`           | Нет          | postgres             | Хост PostgreSQL                  |
 | `DB_PORT`           | Нет          | 5432                 | Порт PostgreSQL                  |
 | `DB_USER`           | Нет          | postgres             | Пользователь БД                  |
@@ -266,6 +264,8 @@ HPA настроен на:
 | `DB_NAME`           | Нет          | uai_robot            | Имя БД                           |
 | `WEBHOOK_HOST`      | Нет          | 0.0.0.0              | Хост webhook-сервера             |
 | `WEBHOOK_PORT`      | Нет          | 8443                 | Порт webhook-сервера             |
+| `WEBHOOK_BASE_URL`  | Да           | —                    | Публичный HTTPS-URL (напр. `https://bot.example.com`) |
+| `WEBHOOK_SECRET`    | Нет          | —                    | Секрет для верификации Telegram webhook |
 | `MESSAGES_DIR`      | Нет          | users                | Директория для файлов            |
 
 ---

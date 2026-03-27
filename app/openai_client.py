@@ -11,10 +11,7 @@ from app.config import settings, SYSTEM_PROMPT
 
 log = logging.getLogger(__name__)
 
-client = AsyncOpenAI(
-    api_key=settings.openai.api_key,
-    base_url=settings.openai.base_url if settings.openai.base_url else None,
-)
+client = AsyncOpenAI(api_key=settings.openai.api_key)
 
 SUPPORTED_FILE_EXTENSIONS = {
     ".pdf", ".txt", ".md", ".json", ".csv", ".tsv",

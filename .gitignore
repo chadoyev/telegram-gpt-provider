@@ -14,6 +14,10 @@ users/
 *.tar.gz
 *.rar
 
+# Old data dumps
+db_uai.sql
+db_uai1.json
+
 # Binaries
 ffmpeg/
 *.exe
