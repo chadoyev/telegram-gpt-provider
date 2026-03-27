@@ -154,13 +154,13 @@ async def text_to_speech(text: str, voice: str = "nova", output_path: str = "out
     return output_path
 
 
-async def generate_image(prompt: str) -> str:
+async def generate_image(prompt: str, quality: str = "medium") -> str:
     """Generate an image and return its URL."""
     response = await client.images.generate(
         model=settings.openai.image_model,
         prompt=prompt,
         size="1024x1024",
-        quality="hd",
+        quality=quality,
         n=1,
     )
     return response.data[0].url

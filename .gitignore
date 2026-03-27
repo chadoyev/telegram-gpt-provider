@@ -13,5 +13,13 @@ users/
 *.zip
 *.tar.gz
 *.rar
-db_uai.sql
-db_uai1.json
+
+# Binaries
+ffmpeg/
+*.exe
+*.dll
+*.so
+*.dylib
+*.a
+*.lib
+*.def

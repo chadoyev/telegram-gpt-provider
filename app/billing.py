@@ -67,7 +67,7 @@ async def charge_tts(user_id: int, char_count: int, country: str | None) -> tupl
     return await charge_user(user_id, cost_usd, country)
 
 
-async def charge_dalle(user_id: int, country: str | None) -> tuple[float, float]:
+async def charge_image(user_id: int, country: str | None) -> tuple[float, float]:
     bs = await db.get_bot_settings()
-    cost_usd = float(bs["price_dalle"])
+    cost_usd = float(bs["price_image"])
     return await charge_user(user_id, cost_usd, country)

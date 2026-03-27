@@ -344,9 +344,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "*GPT-5.4:*\n"
             "💲 $3.00 / 1M токенов (вход)\n"
             "💲 $18.00 / 1M токенов (выход)\n\n"
-            "*Whisper (STT):* $0.0072 / мин\n"
-            "*TTS-1:* $18 / 1M символов\n"
-            "*DALL-E 3:* $0.048 / изображение\n\n"
+            "*STT (gpt-4o-mini-transcribe):* $0.0036 / мин\n"
+            "*TTS (gpt-4o-mini-tts):* $18 / 1M символов\n"
+            "*Генерация изображений (gpt-image-1.5):* $0.041 / шт.\n\n"
             "📎 Файлы (PDF, DOCX, XLSX, TXT, код) — по тарифу выбранной модели."
         ),
         "kz": (
@@ -357,9 +357,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "*GPT-5.4:*\n"
             "💲 $3.00 / 1M токен (кіріс)\n"
             "💲 $18.00 / 1M токен (шығыс)\n\n"
-            "*Whisper (STT):* $0.0072 / мин\n"
-            "*TTS-1:* $18 / 1M таңба\n"
-            "*DALL-E 3:* $0.048 / кескін\n\n"
+            "*STT (gpt-4o-mini-transcribe):* $0.0036 / мин\n"
+            "*TTS (gpt-4o-mini-tts):* $18 / 1M таңба\n"
+            "*Кескін генерациясы (gpt-image-1.5):* $0.041 / шт.\n\n"
             "📎 Файлдар (PDF, DOCX, XLSX, TXT, код) — таңдалған модель тарифі бойынша."
         ),
         "ua": (
@@ -370,9 +370,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "*GPT-5.4:*\n"
             "💲 $3.00 / 1M токенів (вхід)\n"
             "💲 $18.00 / 1M токенів (вихід)\n\n"
-            "*Whisper (STT):* $0.0072 / хв\n"
-            "*TTS-1:* $18 / 1M символів\n"
-            "*DALL-E 3:* $0.048 / зображення\n\n"
+            "*STT (gpt-4o-mini-transcribe):* $0.0036 / хв\n"
+            "*TTS (gpt-4o-mini-tts):* $18 / 1M символів\n"
+            "*Генерація зображень (gpt-image-1.5):* $0.041 / шт.\n\n"
             "📎 Файли (PDF, DOCX, XLSX, TXT, код) — за тарифом обраної моделі."
         ),
         "en": (
@@ -383,9 +383,9 @@ _STRINGS: dict[str, dict[str, str]] = {
             "*GPT-5.4:*\n"
             "💲 $3.00 / 1M tokens (input)\n"
             "💲 $18.00 / 1M tokens (output)\n\n"
-            "*Whisper (STT):* $0.0072 / min\n"
-            "*TTS-1:* $18 / 1M chars\n"
-            "*DALL-E 3:* $0.048 / image\n\n"
+            "*STT (gpt-4o-mini-transcribe):* $0.0036 / min\n"
+            "*TTS (gpt-4o-mini-tts):* $18 / 1M chars\n"
+            "*Image Generation (gpt-image-1.5):* $0.041 / image\n\n"
             "📎 Files (PDF, DOCX, XLSX, TXT, code) — billed per selected model rates."
         ),
     },

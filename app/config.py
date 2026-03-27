@@ -32,9 +32,9 @@ class OpenAIConfig:
     base_url: str = field(default_factory=lambda: _env("OPENAI_API_BASE", "https://api.openai.com/v1"))
     default_model: str = "gpt-5.4-mini"
     premium_model: str = "gpt-5.4"
-    image_model: str = "dall-e-3"
-    tts_model: str = "tts-1"
-    stt_model: str = "whisper-1"
+    image_model: str = "gpt-image-1.5"
+    tts_model: str = "gpt-4o-mini-tts"
+    stt_model: str = "gpt-4o-mini-transcribe"
     max_tokens: int = 4096
 
 
@@ -103,19 +103,27 @@ SYSTEM_PROMPT = (
 
 VOICES = {
     "ru": {
-        "alloy": "Алиса", "echo": "Андрей", "fable": "Дмитрий",
-        "onyx": "Тимофей", "nova": "Вероника", "shimmer": "Анастасия",
+        "alloy": "Алиса", "ash": "Артём", "ballad": "Борис",
+        "coral": "Карина", "echo": "Андрей", "fable": "Дмитрий",
+        "nova": "Вероника", "onyx": "Тимофей", "sage": "Софья",
+        "shimmer": "Анастасия", "verse": "Виктор",
     },
     "kz": {
-        "alloy": "Адель", "echo": "Айдар", "fable": "Дамир",
-        "onyx": "Тамерлан", "nova": "Асель", "shimmer": "Әлия",
+        "alloy": "Адель", "ash": "Арман", "ballad": "Бауыржан",
+        "coral": "Камила", "echo": "Айдар", "fable": "Дамир",
+        "nova": "Асель", "onyx": "Тамерлан", "sage": "Сара",
+        "shimmer": "Әлия", "verse": "Олжас",
     },
     "ua": {
-        "alloy": "Аліса", "echo": "Андрій", "fable": "Дмитро",
-        "onyx": "Тимофій", "nova": "Вероніка", "shimmer": "Анастасія",
+        "alloy": "Аліса", "ash": "Артем", "ballad": "Богдан",
+        "coral": "Каріна", "echo": "Андрій", "fable": "Дмитро",
+        "nova": "Вероніка", "onyx": "Тимофій", "sage": "Софія",
+        "shimmer": "Анастасія", "verse": "Віктор",
     },
     "en": {
-        "alloy": "Alloy", "echo": "Echo", "fable": "Fable",
-        "onyx": "Onyx", "nova": "Nova", "shimmer": "Shimmer",
+        "alloy": "Alloy", "ash": "Ash", "ballad": "Ballad",
+        "coral": "Coral", "echo": "Echo", "fable": "Fable",
+        "nova": "Nova", "onyx": "Onyx", "sage": "Sage",
+        "shimmer": "Shimmer", "verse": "Verse",
     },
 }

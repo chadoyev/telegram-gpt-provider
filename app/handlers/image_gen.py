@@ -8,7 +8,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 
 from app import db
-from app.billing import charge_dalle, check_balance, get_currency
+from app.billing import charge_image, check_balance, get_currency
 from app.keyboards import welcome_keyboard, close_keyboard
 from app.locales import t
 from app.openai_client import generate_image
@@ -57,7 +57,7 @@ async def do_generate_image(message: Message, state: FSMContext, bot: Bot, db_us
         await state.clear()
         return
 
-    cost_local, new_balance = await charge_dalle(user_id, country)
+        cost_local, new_balance = await charge_image(user_id, country)
     _, cur = get_currency(country)
 
     caption = t(
