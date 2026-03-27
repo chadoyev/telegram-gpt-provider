@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: uai-robot-bot
+  namespace: uai-robot
+  labels:
+    app: uai-robot-bot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: uai-robot-bot
+  template:
+    metadata:
+      labels:
+        app: uai-robot-bot
+    spec:
+      containers:
+        - name: bot
+          image: uai-robot:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8443
+              name: webhooks
+          envFrom:
+            - secretRef:
+                name: uai-robot-secrets
+            - configMapRef:
+                name: uai-robot-config
+          volumeMounts:
+            - name: bot-data
+              mountPath: /app/users
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8443
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8443
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+      volumes:
+        - name: bot-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: uai-robot-bot
+  namespace: uai-robot
+spec:
+  selector:
+    app: uai-robot-bot
+  ports:
+    - port: 8443
+      targetPort: 8443
+      name: webhooks
+  type: ClusterIP

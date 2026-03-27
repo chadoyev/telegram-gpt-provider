@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: uai-robot-config
+  namespace: uai-robot
+data:
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "uai_robot"
+  DB_USER: "postgres"
+  WEBHOOK_HOST: "0.0.0.0"
+  WEBHOOK_PORT: "8443"
+  MESSAGES_DIR: "/app/users"

@@ -1,0 +1,45 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: uai-robot-ingress
+  namespace: uai-robot
+  annotations:
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts:
+        - your-domain.com
+      secretName: uai-robot-tls
+  rules:
+    - host: your-domain.com
+      http:
+        paths:
+          - path: /freekassa
+            pathType: Exact
+            backend:
+              service:
+                name: uai-robot-bot
+                port:
+                  number: 8443
+          - path: /robokassa
+            pathType: Exact
+            backend:
+              service:
+                name: uai-robot-bot
+                port:
+                  number: 8443
+          - path: /yookassa
+            pathType: Exact
+            backend:
+              service:
+                name: uai-robot-bot
+                port:
+                  number: 8443
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: uai-robot-bot
+                port:
+                  number: 8443

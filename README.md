@@ -1,220 +1,38 @@
-# UAI Robot — Telegram-бот с доступом к ChatGPT
+# UAI Robot — Telegram-бот с доступом к OpenAI GPT-5.4
 
-Продвинутый Telegram-бот, который предоставляет пользователям платный доступ к ChatGPT и другим моделям OpenAI.
-Поддерживает **текст**, **голос (Whisper + TTS)**, **анализ изображений**, **генерацию картинок (DALL-E 3)**, **историю чатов**, **многоязычный интерфейс (RU/KZ/UA/EN)** и встроенную **платёжную систему** (FreeKassa, Robokassa, YooKassa).
+Асинхронный Telegram-бот на **aiogram 3.26** + **OpenAI Responses API**, который предоставляет пользователям платный доступ к GPT-5.4. Поддерживает **стриминг ответов**, **текст**, **голос (Whisper + TTS)**, **анализ изображений**, **анализ документов (PDF, DOCX, XLSX, TXT)**, **генерацию картинок (DALL-E 3)**, **многоязычный интерфейс (RU/KZ/UA/EN)** и встроенную **платёжную систему**.
 
 ---
 
 ## Возможности
 
-- **GPT-4-Turbo / GPT-3.5-Turbo** — текстовый чат с учётом контекста
+- **GPT-5.4 / GPT-5.4 Mini** — текстовый чат с потоковой передачей ответа (streaming)
+- **Файлы** — анализ PDF, DOCX, PPTX, XLSX, CSV, TXT, код и другие форматы
+- **Vision** — анализ фотографий, встроенный в модель
 - **Whisper** — распознавание голосовых сообщений
-- **TTS-1** — озвучивание ответов (6 голосов на каждый язык)
-- **DALL-E 3** — генерация изображений по промпту
-- **GPT-4-Turbo Vision** — анализ фотографий
-- **Биллинг** — баланс, пополнение, транзакции, тарификация по токенам
-- **Рефералка** — реферальные бонусы, триал, кэшбэк
-- **Экспорт** — чаты и транзакции в HTML-файлы
-- **Админ-панель** — управление ботом прямо из Telegram
-- **Подписка на канал** — опциональная проверка подписки
+- **TTS-1** — озвучивание ответов (6 голосов)
+- **DALL-E 3** — генерация изображений
+- **Стриминг** — ответы нейросети показываются в реальном времени через `send_message_draft` (Bot API 9.5)
+- **Биллинг** — баланс, пополнение, транзакции
+- **Платежи** — FreeKassa, Robokassa, YooKassa
+- **Рефералка** — бонусы за приведённых пользователей
+- **Админ-панель** — управление ботом из Telegram
+- **Docker + Kubernetes** — готовые конфигурации для деплоя
 
 ---
 
 ## Технологии
 
-| Компонент | Стек |
-|-----------|------|
-| Язык | Python 3.10+ |
-| Telegram | `pyTelegramBotAPI` (`telebot`) |
-| OpenAI | `openai` (Chat, Whisper, TTS, DALL-E) |
-| Web / платежи | `Flask` (вебхуки для платёжных коллбэков) |
-| База данных | PostgreSQL + `psycopg2-binary` |
-| Платежи | FreeKassa, Robokassa, `yookassa` |
-| Аудио | FFmpeg (конвертация MP3 ↔ OGG) |
-| Прочее | `tiktoken`, `mutagen`, `schedule`, `requests`, `python-dotenv` |
-
----
-
-## Требования
-
-- **Python** 3.10 или выше
-- **PostgreSQL** 12 или выше
-- **FFmpeg** (с `ffmpeg.exe` в PATH или в `ffmpeg/bin/`)
-- SSL-сертификат (для HTTPS-коллбэков платёжных систем)
-
----
-
-## Установка и запуск
-
-### 1. Клонировать репозиторий
-
-```bash
-git clone https://github.com/your-username/uai_robot.git
-cd uai_robot
-```
-
-### 2. Создать виртуальное окружение
-
-```bash
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# Linux / macOS
-source venv/bin/activate
-```
-
-### 3. Установить зависимости
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Установить FFmpeg
-
-FFmpeg нужен для конвертации аудио между MP3 и OGG (голосовые сообщения Telegram).
-
-**Windows:**
-1. Скачайте [FFmpeg](https://ffmpeg.org/download.html) (builds от gyan.dev или BtbN)
-2. Распакуйте и поместите `ffmpeg.exe` в папку `ffmpeg/bin/` внутри проекта
-3. Либо добавьте FFmpeg в системный PATH
-
-**Linux (Ubuntu/Debian):**
-```bash
-sudo apt update && sudo apt install ffmpeg
-```
-
-**macOS:**
-```bash
-brew install ffmpeg
-```
-
-> **Примечание:** В `main.py` путь к ffmpeg прописан как `ffmpeg\bin\ffmpeg.exe`. На Linux/macOS замените на `ffmpeg` (из PATH) или на соответствующий путь.
-
-### 5. Настроить PostgreSQL
-
-1. Установите PostgreSQL, если его ещё нет
-2. Создайте базу данных:
-
-```bash
-psql -U postgres
-```
-
-```sql
-CREATE DATABASE uai_robot;
-\q
-```
-
-3. Инициализируйте таблицы:
-
-```bash
-psql -U postgres -d uai_robot -f schema.sql
-```
-
-### 6. Создать Telegram-бота
-
-1. Откройте [@BotFather](https://t.me/BotFather) в Telegram
-2. Отправьте `/newbot` и следуйте инструкциям
-3. Скопируйте полученный **API токен**
-4. Запомните ваш **Telegram ID** (можно узнать через [@userinfobot](https://t.me/userinfobot)) — он будет `ADMIN_ID`
-
-### 7. Настроить платёжные системы (опционально)
-
-Бот поддерживает три платёжные системы. Настройте те, которые вам нужны:
-
-**FreeKassa:**
-1. Зарегистрируйтесь на [freekassa.com](https://freekassa.com)
-2. Создайте магазин, получите `MERCHANT_ID`, `SECRET1`, `SECRET2`
-3. Укажите URL уведомления: `https://ваш-сервер:443/freekassa`
-
-**Robokassa:**
-1. Зарегистрируйтесь на [robokassa.com](https://robokassa.com)
-2. Создайте магазин, получите `LOGIN`, `PASS1`, `PASS2`
-3. Укажите Result URL: `https://ваш-сервер:443/robokassa`
-
-**YooKassa:**
-1. Зарегистрируйтесь на [yookassa.ru](https://yookassa.ru)
-2. Получите `ACCOUNT_ID` и `SECRET_KEY`
-3. Настройте вебхук на `https://ваш-сервер:443/yookassa`
-
-### 8. SSL-сертификат
-
-Flask-сервер для приёма платежных коллбэков запускается с HTTPS (порт 443). Вам нужен SSL-сертификат:
-
-**Self-signed (для тестирования):**
-```bash
-openssl req -x509 -newkey rsa:2048 -keyout server.key -out server.crt -days 365 -nodes
-```
-
-**Production:**
-Используйте [Let's Encrypt](https://letsencrypt.org/) (certbot) или сертификат от вашего хостинг-провайдера. Положите файлы `server.crt` и `server.key` в корень проекта.
-
-> Файлы `server.crt` и `server.key` добавлены в `.gitignore` — они **не должны** попадать в репозиторий.
-
-### 9. Настроить переменные окружения
-
-Скопируйте `.env.example` в `.env` и заполните реальными значениями:
-
-```bash
-cp .env.example .env
-```
-
-Откройте `.env` и заполните:
-
-```dotenv
-# === Telegram ===
-API_TOKEN=123456789:ABCDefGHIjklMNOpqrSTUvwxyz       # токен от @BotFather
-ADMIN_ID=123456789                                     # ваш Telegram ID
-PASSWORD_ADMIN=ваш-надёжный-пароль                     # пароль для админ-панели
-
-# === OpenAI ===
-OPENAI_API_KEY_PAID=sk-xxxxxxxxxxxxxxxxxxxxxxxx        # API-ключ OpenAI (платная модель)
-OPENAI_API_KEY_FREE=sk-xxxxxxxxxxxxxxxxxxxxxxxx        # API-ключ для бесплатной модели (или тот же)
-OPENAI_API_BASE_PAID=https://api.openai.com/v1/        # базовый URL OpenAI API
-OPENAI_API_BASE_FREE=https://api.openai.com/v1/        # или прокси-сервер
-
-# === FreeKassa ===
-FREEKASSA_SECRET1=ваш-секрет-1
-FREEKASSA_SECRET2=ваш-секрет-2
-FREEKASSA_MERCHANT_ID=123456
-FREEKASSA_IP_SERVER=0.0.0.0                            # IP вашего сервера
-
-# === Robokassa ===
-ROBOKASSA_LOGIN=ваш-логин
-ROBOKASSA_PASS_TEST1=ваш-пароль-1
-ROBOKASSA_PASS_TEST2=ваш-пароль-2
-
-# === YooKassa ===
-YOOKASSA_ACCOUNT_ID=123456
-YOOKASSA_SECRET_KEY=live_xxxxxxxxxxxxxxxxxxxxxxxx
-RECEIPT_EMAIL=receipt@yourdomain.com                    # email для чеков YooKassa
-
-# === База данных ===
-DB_HOST=127.0.0.1
-DB_USER=postgres
-DB_PASSWORD=ваш-пароль-от-бд
-DB_NAME=uai_robot
-
-# === Ссылки ===
-URL_SUPPORT=https://t.me/your_support_bot
-URL_BOT=https://t.me/your_bot
-URL_CHANNEL=https://t.me/your_channel
-
-# === Прочее ===
-MESSAGES_DIR=users                                     # папка для экспорта чатов
-```
-
-### 10. Запустить бота
-
-```bash
-python main.py
-```
-
-Бот запускает **три потока**:
-1. **Telegram polling** — приём сообщений от пользователей
-2. **Flask HTTPS-сервер** — приём коллбэков от платёжных систем (порт 443)
-3. **Scheduler** — фоновые задачи (обновление курсов валют, очистка чатов)
+| Компонент     | Стек                                              |
+| ------------- | ------------------------------------------------- |
+| Язык          | Python 3.12+                                      |
+| Telegram      | aiogram 3.26 (async, Bot API 9.5)                 |
+| OpenAI        | openai 2.30 — Responses API (streaming, файлы, vision) |
+| Web           | aiohttp (вебхуки для платёжных коллбэков)         |
+| База данных   | PostgreSQL 16 + asyncpg                           |
+| Платежи       | FreeKassa, Robokassa, YooKassa                    |
+| Аудио         | FFmpeg (OGG ↔ MP3)                                |
+| Контейнеры    | Docker + Docker Compose + Kubernetes (HPA)        |
 
 ---
 
@@ -222,94 +40,233 @@ python main.py
 
 ```
 uai_robot/
-├── main.py              # основной файл: бот + Flask + БД + платежи
-├── config.py            # конфигурация из env-переменных + тексты UI
-├── schema.sql           # SQL-схема для инициализации БД
-├── requirements.txt     # Python-зависимости
-├── .env.example         # шаблон переменных окружения
+├── app/
+│   ├── __init__.py
+│   ├── __main__.py          # точка входа: бот + webhook-сервер
+│   ├── config.py             # конфигурация из env
+│   ├── db.py                 # asyncpg: подключение, запросы
+│   ├── billing.py            # биллинг, валюты, списание
+│   ├── openai_client.py      # OpenAI Responses API: стриминг, файлы, vision, TTS, STT
+│   ├── keyboards.py          # inline-клавиатуры
+│   ├── middlewares.py         # middleware: регистрация, статус бота
+│   ├── webhooks.py           # aiohttp: вебхуки платежей + /health
+│   ├── utils.py              # утилиты: FFmpeg, base64, директории
+│   ├── handlers/
+│   │   ├── __init__.py
+│   │   ├── start.py          # /start, язык, страна, соглашение
+│   │   ├── chat.py           # чат: текст, голос, фото, документы + стриминг
+│   │   ├── menu.py           # аккаунт, настройки, чаты
+│   │   ├── admin.py          # админ-панель
+│   │   ├── payments.py       # оплата, транзакции
+│   │   └── image_gen.py      # генерация изображений DALL-E 3
+│   └── locales/
+│       ├── __init__.py
+│       └── loader.py         # i18n: RU/KZ/UA/EN
+├── k8s/
+│   ├── namespace.yaml
+│   ├── postgres.yaml
+│   ├── bot-deployment.yaml
+│   ├── configmap.yaml
+│   ├── secrets.yaml
+│   ├── ingress.yaml
+│   └── hpa.yaml
+├── Dockerfile
+├── docker-compose.yml
+├── .dockerignore
+├── .env.example
 ├── .gitignore
+├── requirements.txt
+├── schema.sql
 ├── LICENSE
-├── README.md
-├── server.crt           # SSL-сертификат (не в git!)
-├── server.key           # SSL-ключ (не в git!)
-├── users/               # экспортированные чаты/транзакции (runtime, не в git)
-└── ffmpeg/
-    └── bin/
-        └── ffmpeg.exe   # исполняемый файл FFmpeg (скачать отдельно)
+└── README.md
 ```
 
 ---
 
-### Быстрый деплой на Ubuntu
+## Быстрый запуск (Docker Compose)
+
+### 1. Клонировать репозиторий
 
 ```bash
-# 1. Обновить систему
-sudo apt update && sudo apt upgrade -y
+git clone https://github.com/chadoyev/telegram-gpt-provider.git
+cd telegram-gpt-provider
+```
 
-# 2. Установить зависимости
-sudo apt install python3 python3-pip python3-venv postgresql ffmpeg -y
+### 2. Настроить переменные окружения
 
-# 3. Настроить PostgreSQL
-sudo -u postgres psql -c "CREATE DATABASE uai_robot;"
-sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'ваш-пароль';"
-sudo -u postgres psql -d uai_robot -f schema.sql
-
-# 4. Клонировать проект
-git clone https://github.com/your-username/uai_robot.git
-cd uai_robot
-
-# 5. Настроить окружение
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-
-# 6. Создать .env (заполнить по аналогии с .env.example)
+```bash
 cp .env.example .env
-nano .env
-
-# 7. Создать SSL-сертификат (или использовать Let's Encrypt)
-openssl req -x509 -newkey rsa:2048 -keyout server.key -out server.crt -days 365 -nodes
-
-# 8. Запустить
-python main.py
+# Заполнить .env реальными значениями
 ```
 
-### Запуск как systemd-сервис (чтобы бот работал постоянно)
+Обязательные переменные:
 
-Создайте файл `/etc/systemd/system/uai-robot.service`:
+| Переменная     | Описание                          |
+| -------------- | --------------------------------- |
+| `API_TOKEN`    | Токен Telegram-бота от @BotFather |
+| `ADMIN_ID`     | Ваш Telegram ID                   |
+| `OPENAI_API_KEY` | API-ключ OpenAI                 |
+| `DB_PASSWORD`  | Пароль PostgreSQL                  |
 
-```ini
-[Unit]
-Description=UAI Robot Telegram Bot
-After=network.target postgresql.service
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/path/to/uai_robot
-Environment=PATH=/path/to/uai_robot/venv/bin:$PATH
-ExecStart=/path/to/uai_robot/venv/bin/python main.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-```
+### 3. Запустить
 
 ```bash
-sudo systemctl daemon-reload
-sudo systemctl enable uai-robot
-sudo systemctl start uai-robot
-
-# Проверить статус
-sudo systemctl status uai-robot
-
-# Смотреть логи
-journalctl -u uai-robot -f
+docker compose up -d
 ```
+
+Бот запустится вместе с PostgreSQL. Таблицы создаются автоматически при старте.
+
+### 4. Проверить
+
+```bash
+docker compose logs -f bot
+# Должно быть: "Bot starting polling..."
+```
+
+---
+
+## Запуск без Docker
+
+### Требования
+
+- Python 3.12+
+- PostgreSQL 16+
+- FFmpeg (в PATH)
+
+### Установка
+
+```bash
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+# venv\Scripts\activate   # Windows
+
+pip install -r requirements.txt
+```
+
+### Создать БД
+
+```bash
+createdb uai_robot
+# Или через psql:
+# psql -U postgres -c "CREATE DATABASE uai_robot;"
+```
+
+### Запуск
+
+```bash
+cp .env.example .env
+# Заполнить .env (DB_HOST=127.0.0.1 для локального запуска)
+
+python -m app
+```
+
+---
+
+## Деплой в Kubernetes
+
+### 1. Собрать Docker-образ
+
+```bash
+docker build -t uai-robot:latest .
+# Или запушить в реестр:
+# docker tag uai-robot:latest your-registry/uai-robot:latest
+# docker push your-registry/uai-robot:latest
+```
+
+### 2. Настроить секреты
+
+Отредактируйте `k8s/secrets.yaml` — замените `CHANGE_ME` на реальные значения.
+
+### 3. Применить манифесты
+
+```bash
+kubectl apply -f k8s/namespace.yaml
+kubectl apply -f k8s/secrets.yaml
+kubectl apply -f k8s/configmap.yaml
+kubectl apply -f k8s/postgres.yaml
+kubectl apply -f k8s/bot-deployment.yaml
+kubectl apply -f k8s/hpa.yaml
+# kubectl apply -f k8s/ingress.yaml  # если нужен Ingress для вебхуков
+```
+
+### 4. Проверить
+
+```bash
+kubectl -n uai-robot get pods
+kubectl -n uai-robot logs -f deployment/uai-robot-bot
+```
+
+### Автоскейлинг
+
+HPA настроен на:
+- 1–10 реплик
+- Скейл по CPU (70%) и памяти (80%)
+
+> **Важно:** При использовании polling Telegram допускает только одну активную сессию. Для горизонтального масштабирования переключитесь на webhook-режим Telegram (вместо polling).
+
+---
+
+## Платёжные системы
+
+Бот поддерживает три платёжные системы. Настройте те, которые нужны:
+
+### FreeKassa
+
+1. Зарегистрируйтесь на [freekassa.com](https://freekassa.com)
+2. Создайте магазин
+3. URL уведомления: `https://your-domain.com/freekassa`
+4. Заполните `FREEKASSA_*` в `.env`
+
+### Robokassa
+
+1. Зарегистрируйтесь на [robokassa.com](https://robokassa.com)
+2. Result URL: `https://your-domain.com/robokassa`
+3. Заполните `ROBOKASSA_*` в `.env`
+
+### YooKassa
+
+1. Зарегистрируйтесь на [yookassa.ru](https://yookassa.ru)
+2. Webhook URL: `https://your-domain.com/yookassa`
+3. Заполните `YOOKASSA_*` в `.env`
+
+---
+
+## Модели OpenAI
+
+| Модель        | Описание                                   | Цена (вход/выход за 1K токенов) |
+| ------------- | ------------------------------------------ | ------------------------------- |
+| GPT-5.4 Mini  | Быстрая и дешёвая модель для повседневных задач | $0.005 / $0.015               |
+| GPT-5.4       | Флагманская модель с максимальными возможностями | $0.01 / $0.03                |
+
+### Поддерживаемые форматы файлов
+
+- **Изображения**: JPG, PNG, GIF, WebP
+- **Документы**: PDF, DOC, DOCX, PPT, PPTX
+- **Таблицы**: CSV, TSV, XLS, XLSX
+- **Текст/Код**: TXT, MD, JSON, XML, YAML, PY, JS, TS, HTML, CSS
+
+---
+
+## Переменные окружения
+
+| Переменная          | Обязательная | По умолчанию        | Описание                        |
+| ------------------- | ------------ | -------------------- | ------------------------------- |
+| `API_TOKEN`         | Да           | —                    | Telegram Bot Token              |
+| `ADMIN_ID`          | Да           | 0                    | Telegram ID администратора       |
+| `PASSWORD_ADMIN`    | Нет          | Admin                | Пароль для админ-панели          |
+| `OPENAI_API_KEY`    | Да           | —                    | API-ключ OpenAI                  |
+| `OPENAI_API_BASE`   | Нет          | https://api.openai.com/v1 | Base URL API              |
+| `DB_HOST`           | Нет          | postgres             | Хост PostgreSQL                  |
+| `DB_PORT`           | Нет          | 5432                 | Порт PostgreSQL                  |
+| `DB_USER`           | Нет          | postgres             | Пользователь БД                  |
+| `DB_PASSWORD`       | Да           | —                    | Пароль БД                        |
+| `DB_NAME`           | Нет          | uai_robot            | Имя БД                           |
+| `WEBHOOK_HOST`      | Нет          | 0.0.0.0              | Хост webhook-сервера             |
+| `WEBHOOK_PORT`      | Нет          | 8443                 | Порт webhook-сервера             |
+| `MESSAGES_DIR`      | Нет          | users                | Директория для файлов            |
 
 ---
 
 ## Лицензия
 
-Смотри файл [LICENSE](LICENSE).
+MIT — см. файл [LICENSE](LICENSE).
