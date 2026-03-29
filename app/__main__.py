@@ -8,7 +8,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from app import db
 from app.config import settings
@@ -78,6 +78,7 @@ async def main() -> None:
         secret_token=settings.webhook_secret,
     )
     tg_handler.register(app, path=TELEGRAM_WEBHOOK_PATH)
+    setup_application(app, dp, bot=bot)
 
     runner = web.AppRunner(app)
     await runner.setup()
