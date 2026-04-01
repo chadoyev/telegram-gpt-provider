@@ -152,7 +152,7 @@ async def text_to_speech(text: str, voice: str = "nova", output_path: str = "out
 
 
 async def generate_image(prompt: str, quality: str = "medium") -> str:
-    """Generate an image and return its URL."""
+    """Generate an image and return its URL or base64 data URL."""
     response = await client.images.generate(
         model=settings.openai.image_model,
         prompt=prompt,
@@ -160,4 +160,9 @@ async def generate_image(prompt: str, quality: str = "medium") -> str:
         quality=quality,
         n=1,
     )
-    return response.data[0].url
+    item = response.data[0]
+    if item.url:
+        return item.url
+    if item.b64_json:
+        return f"data:image/png;base64,{item.b64_json}"
+    raise RuntimeError("No image data in response")

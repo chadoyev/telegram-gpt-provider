@@ -16,7 +16,6 @@ router = Router(name="admin")
 
 
 class AdminStates(StatesGroup):
-    waiting_password = State()
     waiting_broadcast = State()
     waiting_add_balance_user = State()
     waiting_add_balance_amount = State()
@@ -39,47 +38,40 @@ def _is_admin(user_id: int) -> bool:
     return user_id == settings.telegram.admin_id
 
 
-@router.message(F.text == "/admin")
-async def cmd_admin(message: Message, state: FSMContext):
-    if not _is_admin(message.from_user.id):
-        return
-    await message.answer(t("admin_enter_password", "ru"))
-    await state.set_state(AdminStates.waiting_password)
-
-
-@router.message(AdminStates.waiting_password)
-async def check_password(message: Message, state: FSMContext):
-    if message.text == settings.telegram.admin_password:
-        bs = await db.get_bot_settings()
-        users_count = await db.count_users()
-        info = (
-            f"*Админ-панель*\n"
-            f"Статус бота: {'✅' if bs['status'] else '❌'}\n"
-            f"Пользователей: {users_count}\n"
-            f"Модель: GPT-5.4 / GPT-5.4 Mini\n"
-            f"Температура: {bs['temperature']}\n"
-            f"Max токенов: {bs['max_tokens']}"
-        )
-        await message.answer(info, parse_mode="Markdown", reply_markup=admin_keyboard())
-        await state.clear()
-    else:
-        await message.answer(t("admin_wrong_password", "ru"))
-        await state.clear()
-
-
-@router.callback_query(F.data == "admin_refresh")
-async def admin_refresh(callback: CallbackQuery):
-    if not _is_admin(callback.from_user.id):
-        return
+async def _admin_panel_text() -> str:
     bs = await db.get_bot_settings()
     users_count = await db.count_users()
-    info = (
+    return (
         f"*Админ-панель*\n"
         f"Статус бота: {'✅' if bs['status'] else '❌'}\n"
         f"Пользователей: {users_count}\n"
         f"Температура: {bs['temperature']}\n"
         f"Max токенов: {bs['max_tokens']}"
     )
+
+
+async def try_admin_command(message: Message) -> bool:
+    """Called from the text handler. Returns True if this was an admin trigger."""
+    if not _is_admin(message.from_user.id):
+        return False
+    if message.text != settings.telegram.admin_password:
+        return False
+
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+    info = await _admin_panel_text()
+    await message.answer(info, parse_mode="Markdown", reply_markup=admin_keyboard())
+    return True
+
+
+@router.callback_query(F.data == "admin_refresh")
+async def admin_refresh(callback: CallbackQuery):
+    if not _is_admin(callback.from_user.id):
+        return
+    info = await _admin_panel_text()
     await callback.message.edit_text(info, parse_mode="Markdown", reply_markup=admin_keyboard())
     await callback.answer()
 
@@ -92,6 +84,8 @@ async def toggle_status(callback: CallbackQuery):
     new_status = not bs["status"]
     await db.update_bot_settings(status=new_status)
     await callback.answer(f"Бот {'включён' if new_status else 'выключен'}", show_alert=True)
+    info = await _admin_panel_text()
+    await callback.message.edit_text(info, parse_mode="Markdown", reply_markup=admin_keyboard())
 
 
 @router.callback_query(F.data == "admin_stats")
@@ -122,13 +116,11 @@ async def do_broadcast(message: Message, state: FSMContext, bot: Bot):
         await state.clear()
         return
 
-    async with db.pool.acquire() as conn:
-        rows = await conn.fetch("SELECT user_id FROM users")
-
+    user_ids = await db.get_all_user_ids()
     count = 0
-    for row in rows:
+    for uid in user_ids:
         try:
-            await bot.send_message(row["user_id"], message.text)
+            await bot.send_message(uid, message.text)
             count += 1
         except Exception:
             pass
@@ -170,6 +162,15 @@ async def admin_balance_amount(message: Message, state: FSMContext):
     try:
         amount = float(message.text)
         new_bal = await db.add_balance(uid, amount)
+
+        user = await db.get_user(uid)
+        country = user["country"] if user else "Другое"
+        cur_code, _ = get_currency_for_admin(country)
+        await db.create_transaction(
+            uid, 7, amount, cur_code,
+            description="Admin top-up",
+        )
+
         await message.answer(f"✅ Баланс пополнен. Новый баланс: {round(new_bal, 2)}")
     except (ValueError, TypeError):
         await message.answer("Некорректная сумма.")
@@ -213,3 +214,8 @@ async def set_setting_value(message: Message, state: FSMContext):
     except (ValueError, AssertionError):
         await message.answer("Некорректное значение.")
     await state.clear()
+
+
+def get_currency_for_admin(country: str) -> tuple[str, str]:
+    from app.billing import get_currency
+    return get_currency(country)

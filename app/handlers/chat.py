@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 import time
@@ -14,6 +13,7 @@ from app.billing import (
     calculate_cost_usd, charge_user, check_balance,
     charge_whisper, charge_tts, get_currency,
 )
+from app.chat_export import export_single_chat
 from app.config import settings
 from app.keyboards import chat_keyboard, welcome_keyboard, close_keyboard
 from app.locales import t
@@ -49,22 +49,54 @@ async def start_chat(callback: CallbackQuery, lang: str = "en"):
     await db.update_user(user_id, status_chat=True)
     await db.save_message(user_id, chat_id, "system", "Chat started", model="system")
 
-    await callback.message.edit_text(
+    msg = await callback.message.edit_text(
         t("chat_started", lang),
         reply_markup=chat_keyboard(lang, user["voice_enabled"]),
     )
+    await db.track_message(user_id, chat_id, msg.message_id)
     await callback.answer()
 
 
 @router.callback_query(F.data == "end_chat")
-async def end_chat(callback: CallbackQuery, lang: str = "en"):
+async def end_chat(callback: CallbackQuery, bot: Bot, lang: str = "en"):
     user_id = callback.from_user.id
     chat_id = await db.get_current_chat_id(user_id)
-    if chat_id:
-        await db.close_chat(user_id, chat_id)
-    await db.update_user(user_id, status_chat=False)
 
-    await callback.message.edit_text(
+    if chat_id:
+        tg_msgs = await db.get_tracked_messages(user_id, chat_id)
+        for msg_id in tg_msgs:
+            try:
+                await bot.delete_message(user_id, msg_id)
+            except Exception:
+                pass
+        await db.delete_tracked_messages(user_id, chat_id)
+
+        await db.close_chat(user_id, chat_id)
+
+        total_spent = await db.get_chat_total_spending(user_id, chat_id)
+        if total_spent > 0:
+            user = await db.get_user(user_id)
+            country = user["country"] if user else "Другое"
+            cur_code, _ = get_currency(country)
+            await db.create_transaction(
+                user_id, 6, total_spent, cur_code,
+                chat_number=chat_id, description="Chat payment",
+            )
+
+        try:
+            file_path = await export_single_chat(user_id, chat_id, lang)
+            doc = FSInputFile(file_path)
+            await bot.send_document(
+                user_id, doc,
+                caption=t("your_chat_file", lang),
+                reply_markup=close_keyboard(lang),
+            )
+        except Exception as e:
+            log.error("Chat export error: %s", e)
+
+    await db.update_user(user_id, status_chat=False)
+    await bot.send_message(
+        user_id,
         t("chat_ended", lang),
         reply_markup=welcome_keyboard(lang),
     )
@@ -105,7 +137,6 @@ async def _stream_response(
     file_name: str | None = None,
     lang: str = "en",
 ) -> tuple[str, str]:
-    """Stream AI response to user via message drafts, return (full_text, spending_info)."""
     user = await db.get_user(user_id)
     model = user["ai_model"]
     country = user["country"]
@@ -122,7 +153,6 @@ async def _stream_response(
         draft_id = 1
 
     try:
-        draft_sent = False
         async for chunk in chat_stream(
             history=history,
             text=text,
@@ -144,7 +174,6 @@ async def _stream_response(
                         draft_id=draft_id,
                         text=display,
                     )
-                    draft_sent = True
                     last_update = now
                 except Exception as e:
                     log.debug("Draft update failed: %s", e)
@@ -173,6 +202,10 @@ async def handle_text(message: Message, bot: Bot, db_user=None, lang: str = "en"
         return
     user_id = message.from_user.id
 
+    from app.handlers.admin import try_admin_command
+    if await try_admin_command(message):
+        return
+
     if not db_user["status_chat"]:
         await message.answer(t("no_active_chat", lang), reply_markup=welcome_keyboard(lang))
         return
@@ -184,7 +217,10 @@ async def handle_text(message: Message, bot: Bot, db_user=None, lang: str = "en"
     chat_id = await db.get_current_chat_id(user_id)
     history = await _get_history(user_id, chat_id)
 
+    await db.track_message(user_id, chat_id, message.message_id)
+
     status_msg = await message.answer(t("thinking", lang))
+    await db.track_message(user_id, chat_id, status_msg.message_id)
 
     await db.save_message(user_id, chat_id, "user", message.text, model=db_user["ai_model"])
 
@@ -209,7 +245,8 @@ async def handle_text(message: Message, bot: Bot, db_user=None, lang: str = "en"
         try:
             await status_msg.edit_text(final_text)
         except Exception:
-            await message.answer(final_text[:4096])
+            new_msg = await message.answer(final_text[:4096])
+            await db.track_message(user_id, chat_id, new_msg.message_id)
 
     await db.save_message(
         user_id, chat_id, "assistant", full_text,
@@ -218,7 +255,9 @@ async def handle_text(message: Message, bot: Bot, db_user=None, lang: str = "en"
 
     user = await db.get_user(user_id)
     if user and user["voice_enabled"]:
-        await _send_voice_reply(message, bot, full_text, user, lang)
+        voice_msg_id = await _send_voice_reply(message, bot, full_text, user, lang)
+        if voice_msg_id:
+            await db.track_message(user_id, chat_id, voice_msg_id)
 
 
 @router.message(F.voice)
@@ -228,7 +267,12 @@ async def handle_voice(message: Message, bot: Bot, db_user=None, lang: str = "en
         return
 
     user_id = message.from_user.id
+    chat_id = await db.get_current_chat_id(user_id)
+
+    await db.track_message(user_id, chat_id, message.message_id)
+
     status_msg = await message.answer(t("recognize_voice", lang))
+    await db.track_message(user_id, chat_id, status_msg.message_id)
 
     user_dir = ensure_user_dir(user_id)
     ogg_path = str(user_dir / f"voice_{int(time.time())}.ogg")
@@ -252,7 +296,6 @@ async def handle_voice(message: Message, bot: Bot, db_user=None, lang: str = "en
 
     await charge_whisper(user_id, duration, db_user["country"])
 
-    chat_id = await db.get_current_chat_id(user_id)
     history = await _get_history(user_id, chat_id)
     await db.save_message(user_id, chat_id, "user", text, model="whisper", file_type="voice", file_path=ogg_path)
 
@@ -274,7 +317,9 @@ async def handle_voice(message: Message, bot: Bot, db_user=None, lang: str = "en
 
     user = await db.get_user(user_id)
     if user and user["voice_enabled"]:
-        await _send_voice_reply(message, bot, full_text, user, lang)
+        voice_msg_id = await _send_voice_reply(message, bot, full_text, user, lang)
+        if voice_msg_id:
+            await db.track_message(user_id, chat_id, voice_msg_id)
 
     for p in (ogg_path, mp3_path):
         try:
@@ -290,7 +335,12 @@ async def handle_photo(message: Message, bot: Bot, db_user=None, lang: str = "en
         return
 
     user_id = message.from_user.id
+    chat_id = await db.get_current_chat_id(user_id)
+
+    await db.track_message(user_id, chat_id, message.message_id)
+
     status_msg = await message.answer(t("thinking", lang))
+    await db.track_message(user_id, chat_id, status_msg.message_id)
 
     photo = message.photo[-1]
     file_info = await bot.get_file(photo.file_id)
@@ -300,7 +350,6 @@ async def handle_photo(message: Message, bot: Bot, db_user=None, lang: str = "en
 
     caption = message.caption or "Что на этом изображении?"
 
-    chat_id = await db.get_current_chat_id(user_id)
     history = await _get_history(user_id, chat_id)
     await db.save_message(user_id, chat_id, "user", caption, model=db_user["ai_model"], file_type="photo")
 
@@ -336,7 +385,12 @@ async def handle_document(message: Message, bot: Bot, db_user=None, lang: str = 
         await message.answer(t("file_unsupported", lang))
         return
 
+    chat_id = await db.get_current_chat_id(user_id)
+
+    await db.track_message(user_id, chat_id, message.message_id)
+
     status_msg = await message.answer(t("file_received", lang))
+    await db.track_message(user_id, chat_id, status_msg.message_id)
 
     file_info = await bot.get_file(doc.file_id)
     file_bytes = BytesIO()
@@ -351,7 +405,6 @@ async def handle_document(message: Message, bot: Bot, db_user=None, lang: str = 
 
     caption = message.caption or f"Проанализируй файл {file_name}"
 
-    chat_id = await db.get_current_chat_id(user_id)
     history = await _get_history(user_id, chat_id)
     await db.save_message(
         user_id, chat_id, "user", caption,
@@ -377,7 +430,8 @@ async def handle_document(message: Message, bot: Bot, db_user=None, lang: str = 
     await db.save_message(user_id, chat_id, "assistant", full_text, model=db_user["ai_model"], spending=spending)
 
 
-async def _send_voice_reply(message: Message, bot: Bot, text: str, user, lang: str):
+async def _send_voice_reply(message: Message, bot: Bot, text: str, user, lang: str) -> int | None:
+    """Send TTS voice reply. Returns the Telegram message ID of the voice, or None."""
     try:
         user_dir = ensure_user_dir(user["user_id"])
         mp3_path = str(user_dir / f"tts_{int(time.time())}.mp3")
@@ -387,12 +441,15 @@ async def _send_voice_reply(message: Message, bot: Bot, text: str, user, lang: s
         await charge_tts(user["user_id"], len(text), user["country"])
 
         voice_file = FSInputFile(ogg_path)
-        await message.answer_voice(voice_file)
+        voice_msg = await message.answer_voice(voice_file)
 
         for p in (mp3_path, ogg_path):
             try:
                 os.unlink(p)
             except OSError:
                 pass
+
+        return voice_msg.message_id
     except Exception as e:
         log.error("TTS error: %s", e)
+        return None

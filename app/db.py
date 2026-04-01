@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncpg
 import logging
-from datetime import datetime
 from typing import Any
 
 from app.config import settings
@@ -73,7 +72,7 @@ async def init_schema() -> None:
             id                  SERIAL PRIMARY KEY,
             user_id             BIGINT NOT NULL,
             type                INTEGER NOT NULL,
-            merchant_order_id   TEXT UNIQUE,
+            merchant_order_id   TEXT,
             amount              NUMERIC(12,4) NOT NULL,
             currency            TEXT NOT NULL,
             created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -103,6 +102,24 @@ async def init_schema() -> None:
             currency_usd_kzt NUMERIC(10,2) DEFAULT 470.0,
             currency_usd_uah NUMERIC(10,2) DEFAULT 41.0
         );
+        """)
+        await conn.execute("""
+        CREATE TABLE IF NOT EXISTS message_tracking (
+            id              SERIAL PRIMARY KEY,
+            user_id         BIGINT NOT NULL,
+            chat_id         INTEGER NOT NULL,
+            tg_message_id   BIGINT NOT NULL,
+            created_at      TIMESTAMPTZ DEFAULT now()
+        );
+        """)
+        await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_chat_history_user ON chat_history(user_id);
+        """)
+        await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
+        """)
+        await conn.execute("""
+        CREATE INDEX IF NOT EXISTS idx_message_tracking_user_chat ON message_tracking(user_id, chat_id);
         """)
         count = await conn.fetchval("SELECT count(*) FROM bot_settings")
         if count == 0:
@@ -160,6 +177,20 @@ async def add_balance(user_id: int, amount: float) -> float:
             user_id, amount,
         )
         return float(new_bal)
+
+
+async def set_balance(user_id: int, amount: float) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE users SET balance = $2 WHERE user_id = $1",
+            user_id, amount,
+        )
+
+
+async def get_all_user_ids() -> list[int]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT user_id FROM users")
+        return [r["user_id"] for r in rows]
 
 
 # ── Chat history ─────────────────────────────────────────────────
@@ -228,6 +259,49 @@ async def get_all_chat_ids(user_id: int, closed_only: bool = True) -> list[int]:
 async def delete_user_history(user_id: int) -> None:
     async with pool.acquire() as conn:
         await conn.execute("DELETE FROM chat_history WHERE user_id = $1", user_id)
+        await conn.execute("DELETE FROM message_tracking WHERE user_id = $1", user_id)
+
+
+# ── Message tracking (for auto-delete) ──────────────────────────
+
+async def track_message(user_id: int, chat_id: int, tg_message_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO message_tracking (user_id, chat_id, tg_message_id) VALUES ($1, $2, $3)",
+            user_id, chat_id, tg_message_id,
+        )
+
+
+async def get_tracked_messages(user_id: int, chat_id: int) -> list[int]:
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT tg_message_id FROM message_tracking WHERE user_id = $1 AND chat_id = $2",
+            user_id, chat_id,
+        )
+        return [r["tg_message_id"] for r in rows]
+
+
+async def delete_tracked_messages(user_id: int, chat_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "DELETE FROM message_tracking WHERE user_id = $1 AND chat_id = $2",
+            user_id, chat_id,
+        )
+
+
+async def get_stale_active_chats(hours: int = 24) -> list[dict]:
+    """Find users with active chats older than `hours` hours for auto-cleanup."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT DISTINCT ch.user_id, ch.chat_id
+            FROM chat_history ch
+            JOIN users u ON u.user_id = ch.user_id
+            WHERE u.status_chat = TRUE
+              AND ch.status_closed = FALSE
+              AND ch.created_at <= now() - make_interval(hours => $1)
+              AND ch.created_at > now() - make_interval(hours => $1 * 2)
+        """, hours)
+        return [{"user_id": r["user_id"], "chat_id": r["chat_id"]} for r in rows]
 
 
 # ── Transactions ─────────────────────────────────────────────────
@@ -236,14 +310,32 @@ async def create_transaction(
     user_id: int, tx_type: int, amount: float, currency: str,
     merchant_order_id: str | None = None, description: str | None = None,
     referral_id: int | None = None, chat_number: int | None = None,
+    status: bool = True,
 ) -> None:
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO transactions
                (user_id, type, merchant_order_id, amount, currency, status, description, referral_id, chat_number)
-               VALUES ($1, $2, $3, $4, $5, TRUE, $6, $7, $8)""",
-            user_id, tx_type, merchant_order_id, amount, currency, description, referral_id, chat_number,
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+            user_id, tx_type, merchant_order_id, amount, currency, status, description, referral_id, chat_number,
         )
+
+
+async def update_transaction_status(merchant_order_id: str, status: bool = True) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE transactions SET status = $2 WHERE merchant_order_id = $1",
+            merchant_order_id, status,
+        )
+
+
+async def get_transaction_amount(merchant_order_id: str) -> float | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchval(
+            "SELECT amount FROM transactions WHERE merchant_order_id = $1",
+            merchant_order_id,
+        )
+        return float(row) if row is not None else None
 
 
 async def get_user_transactions(user_id: int) -> list[asyncpg.Record]:
@@ -295,3 +387,21 @@ async def count_chats(user_id: int) -> int:
             "SELECT count(DISTINCT chat_id) FROM chat_history WHERE user_id = $1",
             user_id,
         )
+
+
+async def get_chat_total_spending(user_id: int, chat_id: int) -> float:
+    """Sum up total spending for a chat from the spending field."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT spending FROM chat_history WHERE user_id = $1 AND chat_id = $2 AND spending != ''",
+            user_id, chat_id,
+        )
+    total = 0.0
+    for row in rows:
+        try:
+            parts = row["spending"].split("~")
+            if len(parts) >= 3:
+                total += float(parts[2])
+        except (ValueError, IndexError):
+            pass
+    return total

@@ -30,7 +30,7 @@ def country_keyboard(lang: str) -> InlineKeyboardMarkup:
         [_btn("🇷🇺 Россия ₽", "country:Россия")],
         [_btn("🇰🇿 Қазақстан ₸", "country:Казахстан")],
         [_btn("🇺🇦 Україна ₴", "country:Украина")],
-        [_btn("🌍 Other $", "country:Other")],
+        [_btn("🌍 Other $", "country:Другое")],
     ])
 
 
@@ -88,6 +88,12 @@ def chats_menu_keyboard(lang: str) -> InlineKeyboardMarkup:
     ])
 
 
+def chat_number_keyboard(lang: str, chat_ids: list[int]) -> InlineKeyboardMarkup:
+    rows = [[_btn(f"💬 #{cid}", f"export_chat:{cid}")] for cid in chat_ids]
+    rows.append([_btn(f"↩ {t('btn_back', lang)}", "chats_menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
 # ── Model ───────────────────────────────────────────────────────
 
 def model_keyboard(lang: str) -> InlineKeyboardMarkup:
@@ -105,16 +111,6 @@ def voice_keyboard(lang: str) -> InlineKeyboardMarkup:
     rows = [[_btn(f"🎙 {name}", f"set_voice:{key}")] for key, name in voices.items()]
     rows.append([_btn(f"↩ {t('btn_back', lang)}", "account")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
-
-
-# ── Payments ────────────────────────────────────────────────────
-
-def payment_keyboard(lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [_btn("5$", "pay:5"), _btn("10$", "pay:10"), _btn("25$", "pay:25")],
-        [_btn("50$", "pay:50"), _btn("100$", "pay:100")],
-        [_btn(f"↩ {t('btn_back', lang)}", "account")],
-    ])
 
 
 # ── Utility ─────────────────────────────────────────────────────

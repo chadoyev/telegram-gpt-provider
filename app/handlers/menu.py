@@ -4,14 +4,16 @@ import logging
 from datetime import date
 
 from aiogram import Router, F
-from aiogram.types import CallbackQuery
+from aiogram.types import CallbackQuery, FSInputFile
 
 from app import db
-from app.billing import get_currency
+from app.billing import get_currency, get_exchange_rate
+from app.chat_export import export_single_chat, export_all_chats
 from app.config import settings, VOICES
 from app.keyboards import (
     account_keyboard, model_keyboard, voice_keyboard,
     chats_menu_keyboard, back_keyboard, welcome_keyboard,
+    close_keyboard, chat_number_keyboard,
 )
 from app.locales import t
 
@@ -131,7 +133,7 @@ async def show_prices(callback: CallbackQuery, lang: str = "en"):
 @router.callback_query(F.data == "chats_menu")
 async def chats_menu(callback: CallbackQuery, lang: str = "en"):
     await callback.message.edit_text(
-        "💬",
+        t("chats_menu_text", lang),
         reply_markup=chats_menu_keyboard(lang),
     )
     await callback.answer()
@@ -146,9 +148,22 @@ async def get_all_chats(callback: CallbackQuery, lang: str = "en"):
         await callback.answer()
         return
 
-    lines = [f"💬 Chat #{cid}" for cid in chat_ids[-30:]]
-    text = f"*{t('btn_my_chats', lang)}*\n\n" + "\n".join(lines)
-    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=back_keyboard(lang, "chats_menu"))
+    await callback.message.edit_text(t("collecting_chats", lang))
+
+    try:
+        file_path = await export_all_chats(user_id, lang)
+        doc = FSInputFile(file_path)
+        await callback.message.answer_document(
+            doc,
+            caption=t("your_chats_file", lang),
+            reply_markup=close_keyboard(lang),
+        )
+    except Exception as e:
+        log.error("All chats export error: %s", e)
+        lines = [f"💬 Chat #{cid}" for cid in chat_ids[-30:]]
+        text = f"*{t('btn_my_chats', lang)}*\n\n" + "\n".join(lines)
+        await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=back_keyboard(lang, "chats_menu"))
+
     await callback.answer()
 
 
@@ -161,16 +176,37 @@ async def get_one_chat(callback: CallbackQuery, lang: str = "en"):
         await callback.answer()
         return
 
-    last_chat_id = chat_ids[-1]
-    msgs = await db.get_chat_messages(user_id, last_chat_id)
-    lines = []
-    for m in msgs[-15:]:
-        role = "🤖" if m["role"] == "assistant" else "👤"
-        content = (m["content"] or "")[:200]
-        lines.append(f"{role} {content}")
+    await callback.message.edit_text(
+        t("enter_chat_number", lang),
+        reply_markup=chat_number_keyboard(lang, chat_ids[-10:]),
+    )
+    await callback.answer()
 
-    text = f"*Chat #{last_chat_id}*\n\n" + "\n\n".join(lines)
-    await callback.message.edit_text(text[:4096], parse_mode="Markdown", reply_markup=back_keyboard(lang, "chats_menu"))
+
+@router.callback_query(F.data.startswith("export_chat:"))
+async def export_specific_chat(callback: CallbackQuery, lang: str = "en"):
+    user_id = callback.from_user.id
+    try:
+        chat_id = int(callback.data.split(":")[1])
+    except (ValueError, IndexError):
+        await callback.answer(t("unexpected_error", lang), show_alert=True)
+        return
+
+    try:
+        file_path = await export_single_chat(user_id, chat_id, lang)
+        doc = FSInputFile(file_path)
+        await callback.message.answer_document(
+            doc,
+            caption=t("your_chat_file", lang),
+            reply_markup=close_keyboard(lang),
+        )
+    except Exception as e:
+        log.error("Chat export error: %s", e)
+        await callback.message.edit_text(
+            t("unexpected_error", lang),
+            reply_markup=back_keyboard(lang, "chats_menu"),
+        )
+
     await callback.answer()
 
 

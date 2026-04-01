@@ -33,7 +33,7 @@ class OpenAIConfig:
     premium_model: str = "gpt-5.4"
     image_model: str = "gpt-image-1.5"
     tts_model: str = "gpt-4o-mini-tts"
-    stt_model: str = "gpt-4o-mini-transcribe"
+    stt_model: str = "gpt-4o-transcribe"
     max_tokens: int = 4096
 
 
@@ -53,25 +53,17 @@ class DatabaseConfig:
 
 
 @dataclass(frozen=True)
-class FreeKassaConfig:
-    secret1: str = field(default_factory=lambda: _env("FREEKASSA_SECRET1", ""))
-    secret2: str = field(default_factory=lambda: _env("FREEKASSA_SECRET2", ""))
-    merchant_id: str = field(default_factory=lambda: _env("FREEKASSA_MERCHANT_ID", ""))
-    server_ip: str = field(default_factory=lambda: _env("FREEKASSA_IP_SERVER", ""))
-
-
-@dataclass(frozen=True)
 class RobokassaConfig:
     login: str = field(default_factory=lambda: _env("ROBOKASSA_LOGIN", ""))
-    pass1: str = field(default_factory=lambda: _env("ROBOKASSA_PASS1", ""))
-    pass2: str = field(default_factory=lambda: _env("ROBOKASSA_PASS2", ""))
+    pass1: str = field(default_factory=lambda: _env("ROBOKASSA_PASS_TEST1", ""))
+    pass2: str = field(default_factory=lambda: _env("ROBOKASSA_PASS_TEST2", ""))
 
 
 @dataclass(frozen=True)
 class YooKassaConfig:
     account_id: str = field(default_factory=lambda: _env("YOOKASSA_ACCOUNT_ID", ""))
     secret_key: str = field(default_factory=lambda: _env("YOOKASSA_SECRET_KEY", ""))
-    receipt_email: str = field(default_factory=lambda: _env("RECEIPT_EMAIL", ""))
+    receipt_email: str = field(default_factory=lambda: _env("RECEIPT_EMAIL", "receipt@example.com"))
 
 
 @dataclass(frozen=True)
@@ -79,7 +71,6 @@ class Settings:
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     openai: OpenAIConfig = field(default_factory=OpenAIConfig)
     db: DatabaseConfig = field(default_factory=DatabaseConfig)
-    freekassa: FreeKassaConfig = field(default_factory=FreeKassaConfig)
     robokassa: RobokassaConfig = field(default_factory=RobokassaConfig)
     yookassa: YooKassaConfig = field(default_factory=YooKassaConfig)
     messages_dir: str = field(default_factory=lambda: _env("MESSAGES_DIR", "users"))
@@ -96,7 +87,7 @@ SYSTEM_PROMPT = (
     "You communicate with a user. The maximum length of one answer is 4000 characters. "
     "Consider the maximum length when creating large responses. "
     "You can answer by text, generate voice responses, understand photos and documents, "
-    "and generate images via DALL-E. "
+    "and generate images via GPT Image 1.5. "
     "Your services are paid because you work through the official OpenAI API."
 )
 

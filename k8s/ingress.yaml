@@ -15,13 +15,6 @@ spec:
     - host: your-domain.com
       http:
         paths:
-          - path: /freekassa
-            pathType: Exact
-            backend:
-              service:
-                name: uai-robot-bot
-                port:
-                  number: 8443
           - path: /robokassa
             pathType: Exact
             backend:

@@ -7,6 +7,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 
 from app import db
+from app.billing import get_currency, get_exchange_rate
 from app.keyboards import (
     language_keyboard, country_keyboard, terms_keyboard, welcome_keyboard,
 )
@@ -39,7 +40,17 @@ async def cmd_start(message: Message, db_user=None, lang: str = "en"):
             bonus = float(bs["referral_bonus"])
             if bonus > 0:
                 await db.add_balance(referrer, bonus)
-                await db.add_balance(user.id, float(bs["reffer_bonus"]))
+                await db.create_transaction(
+                    referrer, 2, bonus, "USD",
+                    description="Referral bonus", referral_id=user.id,
+                )
+            reffer_bonus = float(bs["reffer_bonus"])
+            if reffer_bonus > 0:
+                await db.add_balance(user.id, reffer_bonus)
+                await db.create_transaction(
+                    user.id, 2, reffer_bonus, "USD",
+                    description="Welcome referral bonus",
+                )
 
         await message.answer(
             t("choose_language", "en"),
@@ -56,7 +67,6 @@ async def cmd_start(message: Message, db_user=None, lang: str = "en"):
 @router.callback_query(F.data.startswith("lang:"))
 async def set_language(callback: CallbackQuery, db_user=None):
     lang = callback.data.split(":")[1]
-    lang_name_map = {"ru": "Русский", "kz": "Казахский", "ua": "Украинский", "en": "Английский"}
     user_id = callback.from_user.id
 
     await db.update_user(user_id, language=lang)
@@ -78,9 +88,15 @@ async def set_language(callback: CallbackQuery, db_user=None):
 
 @router.callback_query(F.data.startswith("country:"))
 async def set_country(callback: CallbackQuery, lang: str = "en"):
-    country = callback.data.split(":")[1]
+    new_country = callback.data.split(":")[1]
     user_id = callback.from_user.id
-    await db.update_user(user_id, country=country)
+    user = await db.get_user(user_id)
+    old_country = user["country"] if user else None
+
+    if old_country and old_country != new_country:
+        await _convert_balance(user_id, old_country, new_country)
+
+    await db.update_user(user_id, country=new_country)
 
     user = await db.get_user(user_id)
     if user and not user["terms_of_use"]:
@@ -90,12 +106,53 @@ async def set_country(callback: CallbackQuery, lang: str = "en"):
             reply_markup=terms_keyboard(lang),
         )
     else:
-        await callback.message.edit_text(
-            t("welcome_message", lang),
-            parse_mode="Markdown",
-            reply_markup=welcome_keyboard(lang),
-        )
+        if old_country and old_country != new_country:
+            await callback.message.edit_text(
+                t("country_changed", lang),
+                reply_markup=welcome_keyboard(lang),
+            )
+        else:
+            await callback.message.edit_text(
+                t("welcome_message", lang),
+                parse_mode="Markdown",
+                reply_markup=welcome_keyboard(lang),
+            )
     await callback.answer()
+
+
+async def _convert_balance(user_id: int, old_country: str, new_country: str):
+    """Convert user balance from old country currency to new country currency."""
+    try:
+        from aiohttp import ClientSession
+
+        old_cur_code, _ = get_currency(old_country)
+        new_cur_code, _ = get_currency(new_country)
+
+        if old_cur_code == new_cur_code:
+            return
+
+        balance = await db.get_balance(user_id)
+        if balance <= 0:
+            return
+
+        async with ClientSession() as session:
+            async with session.get(f"https://api.exchangerate-api.com/v4/latest/{old_cur_code}") as resp:
+                data = await resp.json()
+                rate = data["rates"].get(new_cur_code, 1.0)
+
+        new_balance = round(balance * rate * 0.98, 2)
+        await db.set_balance(user_id, new_balance)
+
+        await db.create_transaction(
+            user_id, 4, balance, old_cur_code,
+            description="Currency conversion (withdrawal)",
+        )
+        await db.create_transaction(
+            user_id, 5, new_balance, new_cur_code,
+            description="Currency conversion (credit)",
+        )
+    except Exception as e:
+        log.error("Balance conversion error: %s", e)
 
 
 @router.callback_query(F.data == "accept_terms")

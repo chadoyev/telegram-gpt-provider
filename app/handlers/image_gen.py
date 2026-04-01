@@ -51,13 +51,13 @@ async def do_generate_image(message: Message, state: FSMContext, bot: Bot, db_us
 
     try:
         image_url = await generate_image(message.text)
+        cost_local, new_balance = await charge_image(user_id, country)
     except Exception as e:
-        log.error("DALL-E error: %s", e)
+        log.error("Image generation error: %s", e)
         await status_msg.edit_text(t("unexpected_error", lang))
         await state.clear()
         return
 
-        cost_local, new_balance = await charge_image(user_id, country)
     _, cur = get_currency(country)
 
     caption = t(

@@ -7,6 +7,7 @@ from aiogram import BaseMiddleware
 from aiogram.types import Message, CallbackQuery, TelegramObject
 
 from app import db
+from app.config import settings
 
 log = logging.getLogger(__name__)
 
@@ -47,6 +48,14 @@ class BotStatusMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: dict[str, Any],
     ) -> Any:
+        if isinstance(event, Message) and event.from_user:
+            if event.from_user.id == settings.telegram.admin_id:
+                return await handler(event, data)
+
+        if isinstance(event, CallbackQuery) and event.from_user:
+            if event.from_user.id == settings.telegram.admin_id:
+                return await handler(event, data)
+
         bs = await db.get_bot_settings()
         if bs and not bs["status"]:
             from app.locales import t

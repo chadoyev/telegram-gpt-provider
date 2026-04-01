@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     id                  SERIAL PRIMARY KEY,
     user_id             BIGINT NOT NULL,
     type                INTEGER NOT NULL,
-    merchant_order_id   TEXT UNIQUE,
+    merchant_order_id   TEXT,
     amount              NUMERIC(12,4) NOT NULL,
     currency            TEXT NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -68,8 +68,17 @@ CREATE TABLE IF NOT EXISTS bot_settings (
     currency_usd_uah     NUMERIC(10,2) DEFAULT 41.00
 );
 
+CREATE TABLE IF NOT EXISTS message_tracking (
+    id              SERIAL PRIMARY KEY,
+    user_id         BIGINT NOT NULL,
+    chat_id         INTEGER NOT NULL,
+    tg_message_id   BIGINT NOT NULL,
+    created_at      TIMESTAMPTZ DEFAULT now()
+);
+
 INSERT INTO bot_settings DEFAULT VALUES
 ON CONFLICT DO NOTHING;
 
 CREATE INDEX IF NOT EXISTS idx_chat_history_user ON chat_history(user_id, chat_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_message_tracking_user_chat ON message_tracking(user_id, chat_id);

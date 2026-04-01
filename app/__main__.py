@@ -41,6 +41,78 @@ async def on_shutdown(bot: Bot) -> None:
     log.info("Telegram webhook removed")
 
 
+async def cleanup_stale_chats(bot: Bot) -> None:
+    """Background task: auto-end chats older than 24 hours and send exports."""
+    while True:
+        try:
+            await asyncio.sleep(600)  # every 10 minutes
+
+            stale = await db.get_stale_active_chats(hours=24)
+            if not stale:
+                continue
+
+            log.info("Auto-cleanup: found %d stale chats", len(stale))
+
+            for item in stale:
+                user_id = item["user_id"]
+                chat_id = item["chat_id"]
+                try:
+                    tg_msgs = await db.get_tracked_messages(user_id, chat_id)
+                    for msg_id in tg_msgs:
+                        try:
+                            await bot.delete_message(user_id, msg_id)
+                        except Exception:
+                            pass
+                    await db.delete_tracked_messages(user_id, chat_id)
+
+                    await db.close_chat(user_id, chat_id)
+
+                    total_spent = await db.get_chat_total_spending(user_id, chat_id)
+                    if total_spent > 0:
+                        user = await db.get_user(user_id)
+                        country = user["country"] if user else "Другое"
+                        from app.billing import get_currency
+                        cur_code, _ = get_currency(country)
+                        await db.create_transaction(
+                            user_id, 6, total_spent, cur_code,
+                            chat_number=chat_id, description="Chat payment (auto)",
+                        )
+
+                    user = await db.get_user(user_id)
+                    lang = user["language"] or "en" if user else "en"
+
+                    try:
+                        from app.chat_export import export_single_chat
+                        from aiogram.types import FSInputFile
+                        from app.locales import t
+                        from app.keyboards import welcome_keyboard, close_keyboard
+
+                        file_path = await export_single_chat(user_id, chat_id, lang)
+                        doc = FSInputFile(file_path)
+                        await bot.send_document(
+                            user_id, doc,
+                            caption=t("your_chat_file", lang),
+                            reply_markup=close_keyboard(lang),
+                        )
+                        await bot.send_message(
+                            user_id,
+                            t("chat_ended", lang),
+                            reply_markup=welcome_keyboard(lang),
+                        )
+                    except Exception as e:
+                        log.error("Auto-cleanup export error for user %s: %s", user_id, e)
+
+                    await db.update_user(user_id, status_chat=False)
+
+                except Exception as e:
+                    log.error("Auto-cleanup error for user %s chat %s: %s", user_id, chat_id, e)
+
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            log.error("Cleanup task error: %s", e)
+
+
 async def main() -> None:
     await db.create_pool()
     await db.init_schema()
@@ -91,9 +163,16 @@ async def main() -> None:
         settings.webhook_port,
     )
 
+    cleanup_task = asyncio.create_task(cleanup_stale_chats(bot))
+
     try:
         await asyncio.Event().wait()
     finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
         await dp.emit_shutdown()
         await runner.cleanup()
         await db.close_pool()
