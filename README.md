@@ -274,7 +274,7 @@ Set in `.env`:
 
 | Value | Effect |
 |-------|--------|
-| `true`, `1`, `yes`, `on` | **Test mode:** Robokassa uses `IsTest=1`; YooKassa creates payments with `test: true`. Use **test** shop credentials (test login/passwords from each provider’s dashboard). |
+| `true` | **Test mode:** Robokassa uses `IsTest=1`; YooKassa creates payments with `test: true`. Use **test** shop credentials (test login/passwords from each provider’s dashboard). |
 | `false` or unset (default) | **Production:** Robokassa `IsTest=0`; YooKassa real payments. Use **live** credentials only. |
 
 The same variable names (`ROBOKASSA_*`, `YOOKASSA_*`) always hold the credentials for the mode you are in—switch the flag **and** replace the secrets when moving from sandbox to production.
@@ -318,7 +318,7 @@ The same variable names (`ROBOKASSA_*`, `YOOKASSA_*`) always hold the credential
 | `DB_USER`              | No       | `postgres`       | PostgreSQL user                                            |
 | `DB_PASSWORD`          | Yes      | —                | PostgreSQL password                                        |
 | `DB_NAME`              | No       | `uai_robot`      | PostgreSQL database name                                   |
-| `TEST_MODE_PAY_SYSTEM` | No       | `false`          | Payment sandbox: `true`/`1`/`yes`/`on` = test (`IsTest` / YooKassa `test`); use test credentials in `ROBOKASSA_*` / `YOOKASSA_*` |
+| `TEST_MODE_PAY_SYSTEM` | No       | `false`          | Payment sandbox: `true` = test (`IsTest` / YooKassa `test`); use test credentials in `ROBOKASSA_*` / `YOOKASSA_*` |
 | `ROBOKASSA_LOGIN`      | No       | —                | Robokassa merchant login                                   |
 | `ROBOKASSA_PASS1`      | No       | —                | Robokassa password #1                                      |
 | `ROBOKASSA_PASS2`      | No       | —                | Robokassa password #2                                      |
@@ -692,7 +692,7 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 
 | Значение | Поведение |
 |----------|-----------|
-| `true`, `1`, `yes`, `on` | **Тест:** у Robokassa `IsTest=1`, у YooKassa платежи с `test: true`. В `ROBOKASSA_*` и `YOOKASSA_*` указывайте **тестовые** данные магазина из личных кабинетов. |
+| `true` | **Тест:** у Robokassa `IsTest=1`, у YooKassa платежи с `test: true`. В `ROBOKASSA_*` и `YOOKASSA_*` указывайте **тестовые** данные магазина из личных кабинетов. |
 | `false` или не задано (по умолчанию) | **Прод:** Robokassa `IsTest=0`, YooKassa — реальные платежи. Только **боевые** ключи и пароли. |
 
 Имена переменных те же; при переходе из песочницы в прод поменяйте флаг **и** замените секреты на продовые.
@@ -736,7 +736,7 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 | `DB_USER`               | Нет     | `postgres`             | Пользователь PostgreSQL                                     |
 | `DB_PASSWORD`           | Да      | —                      | Пароль PostgreSQL                                           |
 | `DB_NAME`               | Нет     | `uai_robot`            | Имя базы данных                                             |
-| `TEST_MODE_PAY_SYSTEM`  | Нет     | `false`                | Тест платежей: `true`/`1`/`yes`/`on` — тестовый режим; в `ROBOKASSA_*` / `YOOKASSA_*` — тестовые кабинеты |
+| `TEST_MODE_PAY_SYSTEM`  | Нет     | `false`                | Тест платежей: `true` — тестовый режим; в `ROBOKASSA_*` / `YOOKASSA_*` — тестовые кабинеты |
 | `ROBOKASSA_LOGIN`       | Нет     | —                      | Логин Robokassa                                             |
 | `ROBOKASSA_PASS1`       | Нет     | —                      | Пароль №1 Robokassa                                         |
 | `ROBOKASSA_PASS2`       | Нет     | —                      | Пароль №2 Robokassa                                         |
