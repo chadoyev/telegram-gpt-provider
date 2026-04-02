@@ -13,7 +13,7 @@ from app import db
 from app.billing import get_currency, get_exchange_rate
 from app.chat_export import export_transactions
 from app.config import settings
-from app.keyboards import back_keyboard
+from app.keyboards import back_keyboard, close_keyboard
 from app.locales import t
 
 log = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ def _md5(*args) -> str:
 
 def _robokassa_url(amount, order_info: str, currency: str, desc: str) -> str:
     """Build a Robokassa payment URL.  order_info = 'user_id-inv_id'."""
+    IsTest = 1
     parts = order_info.split("-")
     inv_id = parts[1]
     shp_id = f"Shp_id={parts[0]}"
@@ -39,7 +40,7 @@ def _robokassa_url(amount, order_info: str, currency: str, desc: str) -> str:
         f"?MerchantLogin={settings.robokassa.login}"
         f"&OutSum={amount}&InvoiceID={inv_id}"
         f"&OutSumCurrency={currency}&Description={desc}"
-        f"&Shp_id={parts[0]}&SignatureValue={sign}&Encoding=UTF-8"
+        f"&Shp_id={parts[0]}&SignatureValue={sign}&Encoding=UTF-8&IsTest={IsTest}"
     )
 
 
@@ -58,13 +59,13 @@ def _yookassa_payment(amount, currency: str, order_info: str, desc: str) -> str 
             "amount": {"value": str(amount), "currency": currency},
             "confirmation": {
                 "type": "redirect",
-                "return_url": settings.telegram.bot_url or "https://t.me/uai_robot",
+                "return_url": settings.telegram.bot_url,
             },
             "capture": True,
             "description": str(desc),
             "metadata": {"order_id": str(order_id), "user_id": str(user_id)},
             "receipt": {
-                "customer": {"email": settings.yookassa.receipt_email},
+                "customer": {"email": settings.yookassa.receipt_email, "phone": settings.yookassa.receipt_phone},
                 "items": [{
                     "description": str(desc),
                     "quantity": "1",
@@ -72,6 +73,7 @@ def _yookassa_payment(amount, currency: str, order_info: str, desc: str) -> str 
                     "vat_code": "1",
                 }],
             },
+            "test": True,
         })
         return payment.confirmation.confirmation_url
     except Exception as e:
@@ -159,10 +161,11 @@ async def quick_pay(callback: CallbackQuery, lang: str = "en"):
     back_btn = InlineKeyboardButton(text=f"↩ {t('btn_back', lang)}", callback_data="account")
     kb = InlineKeyboardMarkup(inline_keyboard=[[pay_btn], [back_btn]])
 
-    await callback.message.edit_text(
+    pay_msg = await callback.message.edit_text(
         t("pay_proceed", lang, amount=amount, cur=cur_sym),
         reply_markup=kb,
     )
+    await db.set_transaction_message_id(order_id, pay_msg.message_id)
     await callback.answer()
 
 
@@ -170,16 +173,20 @@ async def quick_pay(callback: CallbackQuery, lang: str = "en"):
 async def custom_amount_start(callback: CallbackQuery, state: FSMContext, lang: str = "en"):
     await callback.message.edit_text(t("pay_enter_amount", lang))
     await state.set_state(PayStates.waiting_amount)
+    await state.update_data(prompt_msg_id=callback.message.message_id)
     await callback.answer()
 
 
 @router.message(PayStates.waiting_amount)
-async def custom_amount_handler(message: Message, state: FSMContext, db_user=None, lang: str = "en"):
+async def custom_amount_handler(message: Message, state: FSMContext, bot: Bot, db_user=None, lang: str = "en"):
     if not db_user:
         await state.clear()
         return
     user_id = message.from_user.id
     country = db_user["country"] or "Другое"
+
+    data = await state.get_data()
+    prompt_msg_id = data.get("prompt_msg_id")
 
     min_amounts = {"Россия": 10, "Казахстан": 35, "Украина": 35}
     min_amount = min_amounts.get(country, 1)
@@ -189,15 +196,38 @@ async def custom_amount_handler(message: Message, state: FSMContext, db_user=Non
         if amount < min_amount:
             raise ValueError
     except ValueError:
-        await message.answer(t("pay_error_amount", lang))
+        for mid in (prompt_msg_id, message.message_id):
+            try:
+                if mid:
+                    await bot.delete_message(user_id, mid)
+            except Exception:
+                pass
+        menu_btn = InlineKeyboardButton(text=f"↩ {t('btn_to_menu', lang)}", callback_data="account")
+        await message.answer(
+            t("pay_error_amount", lang),
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[menu_btn]]),
+        )
         await state.clear()
         return
 
     url, order_id, cur_code, cur_sym = await _create_payment_link(user_id, amount, country, lang)
     if not url:
+        for mid in (prompt_msg_id, message.message_id):
+            try:
+                if mid:
+                    await bot.delete_message(user_id, mid)
+            except Exception:
+                pass
         await message.answer(t("unexpected_error", lang))
         await state.clear()
         return
+
+    for mid in (prompt_msg_id, message.message_id):
+        try:
+            if mid:
+                await bot.delete_message(user_id, mid)
+        except Exception:
+            pass
 
     await db.create_transaction(
         user_id, 1, float(amount), cur_code,
@@ -211,15 +241,16 @@ async def custom_amount_handler(message: Message, state: FSMContext, db_user=Non
     back_btn = InlineKeyboardButton(text=f"↩ {t('btn_back', lang)}", callback_data="account")
     kb = InlineKeyboardMarkup(inline_keyboard=[[pay_btn], [back_btn]])
 
-    await message.answer(
+    pay_msg = await message.answer(
         t("pay_proceed", lang, amount=amount, cur=cur_sym),
         reply_markup=kb,
     )
+    await db.set_transaction_message_id(order_id, pay_msg.message_id)
     await state.clear()
 
 
 @router.callback_query(F.data == "my_transactions")
-async def my_transactions(callback: CallbackQuery, lang: str = "en"):
+async def my_transactions(callback: CallbackQuery, bot: Bot, lang: str = "en"):
     user_id = callback.from_user.id
     txs = await db.get_user_transactions(user_id)
     if not txs:
@@ -230,7 +261,7 @@ async def my_transactions(callback: CallbackQuery, lang: str = "en"):
         await callback.answer()
         return
 
-    status_msg = await callback.message.edit_text(t("collecting_transactions", lang))
+    await callback.message.edit_text(t("collecting_transactions", lang))
 
     try:
         from aiogram.types import FSInputFile
@@ -239,7 +270,14 @@ async def my_transactions(callback: CallbackQuery, lang: str = "en"):
         await callback.message.answer_document(
             doc,
             caption=t("your_transactions_file", lang),
+            reply_markup=close_keyboard(lang),
         )
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        from app.handlers.menu import send_account_page
+        await send_account_page(bot, user_id, lang)
     except Exception as e:
         log.error("Transaction export error: %s", e)
         lines = []

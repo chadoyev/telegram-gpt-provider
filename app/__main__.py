@@ -13,7 +13,7 @@ from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_applicati
 from app import db
 from app.config import settings
 from app.handlers import start, chat, menu, admin, payments, image_gen
-from app.middlewares import UserRegistrationMiddleware, BotStatusMiddleware
+from app.middlewares import UserRegistrationMiddleware, BotStatusMiddleware, RateLimitMiddleware
 from app.webhooks import create_webhook_app
 
 logging.basicConfig(
@@ -42,12 +42,12 @@ async def on_shutdown(bot: Bot) -> None:
 
 
 async def cleanup_stale_chats(bot: Bot) -> None:
-    """Background task: auto-end chats older than 24 hours and send exports."""
+    """Background task: auto-end chats idle for 20+ hours (before Telegram's 24h delete limit)."""
     while True:
         try:
             await asyncio.sleep(600)  # every 10 minutes
 
-            stale = await db.get_stale_active_chats(hours=24)
+            stale = await db.get_stale_active_chats(hours=20)
             if not stale:
                 continue
 
@@ -125,6 +125,9 @@ async def main() -> None:
 
     dp = Dispatcher(storage=MemoryStorage())
 
+    rate_limiter = RateLimitMiddleware()
+    dp.message.middleware(rate_limiter)
+    dp.callback_query.middleware(rate_limiter)
     dp.message.middleware(UserRegistrationMiddleware())
     dp.callback_query.middleware(UserRegistrationMiddleware())
     dp.message.middleware(BotStatusMiddleware())

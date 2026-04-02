@@ -6,7 +6,7 @@ import logging
 from aiohttp import web
 
 from app import db
-from app.billing import get_currency
+from app.billing import get_currency, topup_referrer_reward_percent
 from app.config import settings
 
 log = logging.getLogger(__name__)
@@ -21,6 +21,16 @@ def _md5(*args: str) -> str:
 @routes.get("/health")
 async def health(request: web.Request) -> web.Response:
     return web.json_response({"status": "ok"})
+
+
+async def _delete_pay_message(bot, user_id: int, order_id: str):
+    """Try to delete the payment-button message after successful payment."""
+    try:
+        msg_id = await db.get_transaction_message_id(order_id)
+        if msg_id and bot:
+            await bot.delete_message(user_id, msg_id)
+    except Exception:
+        pass
 
 
 @routes.get("/robokassa")
@@ -53,19 +63,29 @@ async def robokassa_webhook(request: web.Request) -> web.Response:
 
         await db.add_balance(user_id, amount)
 
+        bot = request.app.get("bot")
+
         referrer_id = user["reffer"] if user else 0
         if referrer_id and referrer_id != 0:
-            await _process_cashback(referrer_id, user_id, amount, country)
+            await _process_cashback(referrer_id, user_id, amount, country, bot=bot)
 
-        bot = request.app.get("bot")
+        await _delete_pay_message(bot, user_id, order_id)
+
         if bot:
             try:
                 from app.locales import t
+                from app.keyboards import welcome_keyboard
                 lang = user["language"] or "en" if user else "en"
                 await bot.send_message(
                     user_id,
                     f"✅{t('pay_success', lang, amount=amount, cur=cur_symbol)}\n"
                     f"├Ордер: {order_id}\n└Сумма: {amount} {cur_symbol}",
+                )
+                await bot.send_message(
+                    user_id,
+                    t("welcome_message", lang),
+                    parse_mode="Markdown",
+                    reply_markup=welcome_keyboard(lang),
                 )
             except Exception:
                 pass
@@ -109,19 +129,29 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
         await db.add_balance(user_id, actual_amount)
 
         user = await db.get_user(user_id)
+        bot = request.app.get("bot")
+
         referrer_id = user["reffer"] if user else 0
         if referrer_id and referrer_id != 0:
-            await _process_cashback(referrer_id, user_id, actual_amount, "Россия")
+            await _process_cashback(referrer_id, user_id, actual_amount, "Россия", bot=bot)
 
-        bot = request.app.get("bot")
+        await _delete_pay_message(bot, user_id, order_id)
+
         if bot:
             try:
                 from app.locales import t
+                from app.keyboards import welcome_keyboard
                 lang = user["language"] or "en" if user else "en"
                 await bot.send_message(
                     user_id,
                     f"✅{t('pay_success', lang, amount=actual_amount, cur='₽')}\n"
                     f"├Ордер: {order_id}\n└Сумма: {actual_amount} ₽",
+                )
+                await bot.send_message(
+                    user_id,
+                    t("welcome_message", lang),
+                    parse_mode="Markdown",
+                    reply_markup=welcome_keyboard(lang),
                 )
             except Exception:
                 pass
@@ -134,15 +164,18 @@ async def yookassa_webhook(request: web.Request) -> web.Response:
         return web.json_response({"status": "error"}, status=500)
 
 
-async def _process_cashback(referrer_id: int, payer_id: int, amount: float, payer_country: str):
-    """Credit cashback to referrer when their referral makes a payment."""
+async def _process_cashback(
+    referrer_id: int, payer_id: int, amount: float, payer_country: str,
+    bot=None,
+):
+    """Начислить рефереру % с пополнения реферала (referral_reward_percent)."""
     try:
         bs = await db.get_bot_settings()
-        cashback_pct = int(bs["cashback"])
-        if cashback_pct <= 0:
+        reward_pct = topup_referrer_reward_percent(bs)
+        if reward_pct <= 0:
             return
 
-        bonus = round((amount * cashback_pct) / 100)
+        bonus = round((amount * reward_pct) / 100)
         if bonus <= 0:
             return
 
@@ -167,6 +200,21 @@ async def _process_cashback(referrer_id: int, payer_id: int, amount: float, paye
             referrer_id, 3, bonus, ref_cur_code,
             description="Cashback", referral_id=payer_id,
         )
+
+        if bot:
+            try:
+                from app.locales import t
+                from app.keyboards import close_keyboard
+                lang = referrer["language"] or "en"
+                await bot.send_message(
+                    referrer_id,
+                    t("cashback_received", lang,
+                      amount=bonus, cur=ref_cur_symbol, payer_id=payer_id),
+                    reply_markup=close_keyboard(lang),
+                )
+            except Exception as e:
+                log.debug("Cashback notification failed: %s", e)
+
     except Exception as e:
         log.error("Cashback error: %s", e)
 

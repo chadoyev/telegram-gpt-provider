@@ -1,7 +1,7 @@
 services:
   bot:
-    image: chadoyev/uai-robot:latest
     build: .
+    image: uai-robot:latest
     container_name: uai_robot_bot
     restart: unless-stopped
     env_file: .env

@@ -10,7 +10,7 @@ load_dotenv()
 
 
 def _env(key: str, default: str | None = None, *, required: bool = False) -> str:
-    val = os.getenv(key, default)
+    val = os.getenv(key) or default
     if required and not val:
         raise RuntimeError(f"Missing required env var: {key}")
     return val or ""
@@ -55,8 +55,8 @@ class DatabaseConfig:
 @dataclass(frozen=True)
 class RobokassaConfig:
     login: str = field(default_factory=lambda: _env("ROBOKASSA_LOGIN", ""))
-    pass1: str = field(default_factory=lambda: _env("ROBOKASSA_PASS_TEST1", ""))
-    pass2: str = field(default_factory=lambda: _env("ROBOKASSA_PASS_TEST2", ""))
+    pass1: str = field(default_factory=lambda: _env("ROBOKASSA_PASS1", ""))
+    pass2: str = field(default_factory=lambda: _env("ROBOKASSA_PASS2", ""))
 
 
 @dataclass(frozen=True)
@@ -64,7 +64,7 @@ class YooKassaConfig:
     account_id: str = field(default_factory=lambda: _env("YOOKASSA_ACCOUNT_ID", ""))
     secret_key: str = field(default_factory=lambda: _env("YOOKASSA_SECRET_KEY", ""))
     receipt_email: str = field(default_factory=lambda: _env("RECEIPT_EMAIL", "receipt@example.com"))
-
+    receipt_phone: str = field(default_factory=lambda: _env("RECEIPT_PHONE", "+79999999999"))
 
 @dataclass(frozen=True)
 class Settings:

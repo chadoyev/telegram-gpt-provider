@@ -46,7 +46,6 @@ def welcome_keyboard(lang: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [_btn(f"👤 {t('btn_account', lang)}", "account")],
         [_btn(f"🟢 {t('btn_start_chat', lang)}", "start_chat")],
-        [_btn(f"🖼 {t('btn_generate_image', lang)}", "gen_image")],
     ])
 
 

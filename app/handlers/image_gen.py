@@ -5,7 +5,7 @@ import logging
 from aiogram import Router, F, Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, BufferedInputFile
 
 from app import db
 from app.billing import charge_image, check_balance, get_currency
@@ -50,7 +50,7 @@ async def do_generate_image(message: Message, state: FSMContext, bot: Bot, db_us
     status_msg = await message.answer(t("img_generating", lang))
 
     try:
-        image_url = await generate_image(message.text)
+        image_bytes = await generate_image(message.text)
         cost_local, new_balance = await charge_image(user_id, country)
     except Exception as e:
         log.error("Image generation error: %s", e)
@@ -73,8 +73,9 @@ async def do_generate_image(message: Message, state: FSMContext, bot: Bot, db_us
     except Exception:
         pass
 
+    photo = BufferedInputFile(image_bytes, filename="generated.png")
     await message.answer_photo(
-        photo=image_url,
+        photo=photo,
         caption=caption,
         parse_mode="Markdown",
         reply_markup=close_keyboard(lang),

@@ -64,7 +64,8 @@ async def init_schema() -> None:
             spending        TEXT,
             model           TEXT,
             created_at      TIMESTAMPTZ DEFAULT now(),
-            status_closed   BOOLEAN DEFAULT FALSE
+            status_closed   BOOLEAN DEFAULT FALSE,
+            cost_usd        NUMERIC(12,6) DEFAULT 0
         );
         """)
         await conn.execute("""
@@ -79,28 +80,40 @@ async def init_schema() -> None:
             status              BOOLEAN DEFAULT FALSE,
             description         TEXT,
             referral_id         BIGINT,
-            chat_number         INTEGER
+            chat_number         INTEGER,
+            tg_message_id       BIGINT DEFAULT NULL
         );
         """)
         await conn.execute("""
         CREATE TABLE IF NOT EXISTS bot_settings (
-            id              SERIAL PRIMARY KEY,
-            status          BOOLEAN DEFAULT TRUE,
-            max_tokens      INTEGER DEFAULT 4096,
-            temperature     NUMERIC(3,2) DEFAULT 0.7,
-            reffer_bonus    NUMERIC(12,4) DEFAULT 0,
-            referral_bonus  NUMERIC(12,4) DEFAULT 0,
-            cashback        INTEGER DEFAULT 5,
-            price_input     NUMERIC(10,6) DEFAULT 0.000900,
-            price_output    NUMERIC(10,6) DEFAULT 0.005400,
-            price_whisper   NUMERIC(10,6) DEFAULT 0.003600,
-            price_tts       NUMERIC(10,6) DEFAULT 0.018000,
-            price_image     NUMERIC(10,4) DEFAULT 0.0410,
-            price_input_premium  NUMERIC(10,6) DEFAULT 0.003000,
-            price_output_premium NUMERIC(10,6) DEFAULT 0.018000,
-            currency_usd_rub NUMERIC(10,2) DEFAULT 95.0,
-            currency_usd_kzt NUMERIC(10,2) DEFAULT 470.0,
-            currency_usd_uah NUMERIC(10,2) DEFAULT 41.0
+            id                       SERIAL PRIMARY KEY,
+            status                   BOOLEAN DEFAULT TRUE,
+            max_tokens               INTEGER DEFAULT 4096,
+            temperature              NUMERIC(3,2) DEFAULT 0.70,
+            reffer_bonus             NUMERIC(12,4) DEFAULT 0,
+            referral_bonus           NUMERIC(12,4) DEFAULT 0,
+            cashback                 INTEGER DEFAULT 5,
+            price_input              NUMERIC(10,6) DEFAULT 0.000900,
+            price_output             NUMERIC(10,6) DEFAULT 0.005400,
+            price_whisper            NUMERIC(10,6) DEFAULT 0.003600,
+            price_tts                NUMERIC(10,6) DEFAULT 0.018000,
+            price_image              NUMERIC(10,4) DEFAULT 0.0410,
+            price_input_premium      NUMERIC(10,6) DEFAULT 0.003000,
+            price_output_premium     NUMERIC(10,6) DEFAULT 0.018000,
+            currency_usd_rub         NUMERIC(10,2) DEFAULT 95.00,
+            currency_usd_kzt         NUMERIC(10,2) DEFAULT 470.00,
+            currency_usd_uah         NUMERIC(10,2) DEFAULT 41.00,
+            reffer_bonus_kzt         NUMERIC(12,4) DEFAULT 0,
+            reffer_bonus_rub         NUMERIC(12,4) DEFAULT 0,
+            reffer_bonus_uah         NUMERIC(12,4) DEFAULT 0,
+            reffer_bonus_usd         NUMERIC(12,4) DEFAULT 0,
+            referral_bonus_kzt       NUMERIC(12,4) DEFAULT 0,
+            referral_bonus_rub       NUMERIC(12,4) DEFAULT 0,
+            referral_bonus_uah       NUMERIC(12,4) DEFAULT 0,
+            referral_bonus_usd       NUMERIC(12,4) DEFAULT 0,
+            markup_percent           NUMERIC(5,2) DEFAULT 0,
+            referral_reward_percent  NUMERIC(5,2) DEFAULT 0,
+            blocked_users            INTEGER DEFAULT 0
         );
         """)
         await conn.execute("""
@@ -216,14 +229,14 @@ async def get_next_chat_id(user_id: int) -> int:
 async def save_message(
     user_id: int, chat_id: int, role: str, content: str,
     model: str = "", spending: str = "", file_type: str | None = None,
-    file_path: str | None = None,
+    file_path: str | None = None, cost_usd: float = 0.0,
 ) -> None:
     async with pool.acquire() as conn:
         await conn.execute(
             """INSERT INTO chat_history
-               (user_id, chat_id, role, content, model, spending, file_type, file_path)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)""",
-            user_id, chat_id, role, content, model, spending, file_type, file_path,
+               (user_id, chat_id, role, content, model, spending, file_type, file_path, cost_usd)
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)""",
+            user_id, chat_id, role, content, model, spending, file_type, file_path, cost_usd,
         )
 
 
@@ -289,17 +302,21 @@ async def delete_tracked_messages(user_id: int, chat_id: int) -> None:
         )
 
 
-async def get_stale_active_chats(hours: int = 24) -> list[dict]:
-    """Find users with active chats older than `hours` hours for auto-cleanup."""
+async def get_stale_active_chats(hours: int = 20) -> list[dict]:
+    """Find active chats whose first tracked message is older than `hours` hours."""
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT DISTINCT ch.user_id, ch.chat_id
-            FROM chat_history ch
-            JOIN users u ON u.user_id = ch.user_id
-            WHERE u.status_chat = TRUE
-              AND ch.status_closed = FALSE
-              AND ch.created_at <= now() - make_interval(hours => $1)
-              AND ch.created_at > now() - make_interval(hours => $1 * 2)
+            SELECT mt.user_id, mt.chat_id
+            FROM message_tracking mt
+            JOIN users u ON u.user_id = mt.user_id AND u.status_chat = TRUE
+            WHERE EXISTS (
+                SELECT 1 FROM chat_history ch
+                WHERE ch.user_id = mt.user_id
+                  AND ch.chat_id = mt.chat_id
+                  AND NOT ch.status_closed
+            )
+            GROUP BY mt.user_id, mt.chat_id
+            HAVING MIN(mt.created_at) <= now() - make_interval(hours => $1)
         """, hours)
         return [{"user_id": r["user_id"], "chat_id": r["chat_id"]} for r in rows]
 
@@ -336,6 +353,22 @@ async def get_transaction_amount(merchant_order_id: str) -> float | None:
             merchant_order_id,
         )
         return float(row) if row is not None else None
+
+
+async def set_transaction_message_id(merchant_order_id: str, tg_message_id: int) -> None:
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE transactions SET tg_message_id = $2 WHERE merchant_order_id = $1",
+            merchant_order_id, tg_message_id,
+        )
+
+
+async def get_transaction_message_id(merchant_order_id: str) -> int | None:
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT tg_message_id FROM transactions WHERE merchant_order_id = $1",
+            merchant_order_id,
+        )
 
 
 async def get_user_transactions(user_id: int) -> list[asyncpg.Record]:
@@ -386,6 +419,22 @@ async def count_chats(user_id: int) -> int:
         return await conn.fetchval(
             "SELECT count(DISTINCT chat_id) FROM chat_history WHERE user_id = $1",
             user_id,
+        )
+
+
+async def get_api_spending_30d() -> float:
+    async with pool.acquire() as conn:
+        val = await conn.fetchval(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM chat_history "
+            "WHERE role = 'assistant' AND created_at >= now() - interval '30 days'"
+        )
+        return float(val)
+
+
+async def count_total_model_requests() -> int:
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT count(*) FROM chat_history WHERE role = 'assistant'"
         )
 
 

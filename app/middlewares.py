@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import time
+from collections import defaultdict
 from typing import Any, Awaitable, Callable
 
 from aiogram import BaseMiddleware
@@ -66,4 +68,70 @@ class BotStatusMiddleware(BaseMiddleware):
             elif isinstance(event, CallbackQuery):
                 await event.answer(t("bot_unavailable", lang), show_alert=True)
                 return
+        return await handler(event, data)
+
+
+class RateLimitMiddleware(BaseMiddleware):
+    """DDoS protection: ban user for 24h if they flood the bot."""
+
+    WINDOW = 10
+    MAX_MESSAGES = 15
+    BAN_DURATION = 86400
+
+    def __init__(self):
+        self._timestamps: dict[int, list[float]] = defaultdict(list)
+        self._banned: dict[int, float] = {}
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
+    ) -> Any:
+        user_obj = None
+        if isinstance(event, Message) and event.from_user:
+            user_obj = event.from_user
+        elif isinstance(event, CallbackQuery) and event.from_user:
+            user_obj = event.from_user
+
+        if not user_obj:
+            return await handler(event, data)
+
+        user_id = user_obj.id
+        if user_id == settings.telegram.admin_id:
+            return await handler(event, data)
+
+        now = time.monotonic()
+
+        if user_id in self._banned:
+            if now - self._banned[user_id] < self.BAN_DURATION:
+                return
+            del self._banned[user_id]
+
+        timestamps = self._timestamps[user_id]
+        timestamps.append(now)
+        cutoff = now - self.WINDOW
+        self._timestamps[user_id] = [ts for ts in timestamps if ts > cutoff]
+
+        if len(self._timestamps[user_id]) > self.MAX_MESSAGES:
+            self._banned[user_id] = now
+            self._timestamps.pop(user_id, None)
+            log.warning("Rate limit ban: user %s blocked for 24h", user_id)
+
+            if isinstance(event, Message):
+                try:
+                    from app.locales import t
+                    lang = data.get("lang", "en")
+                    await event.answer(t("rate_limit_banned", lang))
+                except Exception:
+                    pass
+            elif isinstance(event, CallbackQuery):
+                try:
+                    from app.locales import t
+                    lang = data.get("lang", "en")
+                    await event.answer(t("rate_limit_banned", lang), show_alert=True)
+                except Exception:
+                    pass
+            return
+
         return await handler(event, data)

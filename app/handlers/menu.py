@@ -3,11 +3,11 @@ from __future__ import annotations
 import logging
 from datetime import date
 
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import CallbackQuery, FSInputFile
 
 from app import db
-from app.billing import get_currency, get_exchange_rate
+from app.billing import get_currency, get_exchange_rate, format_prices_markdown
 from app.chat_export import export_single_chat, export_all_chats
 from app.config import settings, VOICES
 from app.keyboards import (
@@ -19,6 +19,38 @@ from app.locales import t
 
 log = logging.getLogger(__name__)
 router = Router(name="menu")
+
+
+async def send_account_page(bot: Bot, user_id: int, lang: str) -> None:
+    """Send the full account info page as a new message."""
+    user = await db.get_user(user_id)
+    if not user:
+        return
+    refs = await db.count_referrals(user_id)
+    msgs = await db.count_messages(user_id)
+    chats = await db.count_chats(user_id)
+    _, cur = get_currency(user["country"])
+    voice_map = VOICES.get(lang, VOICES["en"])
+    voice_name = voice_map.get(user["ai_voice"], user["ai_voice"])
+    reg_date = user["date_reg"].date() if user["date_reg"] else date.today()
+    days = (date.today() - reg_date).days
+    info = t(
+        "account_info", lang,
+        user_id=user_id,
+        name=user["user_name"],
+        date=reg_date.strftime("%d.%m.%Y"),
+        days=f"{days}d",
+        balance=round(float(user["balance"]), 2),
+        cur=cur,
+        model=user["ai_model"],
+        voice=voice_name,
+        msgs=msgs,
+        chats=chats,
+        country=user["country"] or "—",
+        refs=refs,
+        ref_link=f"{settings.telegram.bot_url}?start={user_id}",
+    )
+    await bot.send_message(user_id, info, parse_mode="Markdown", reply_markup=account_keyboard(lang))
 
 
 @router.callback_query(F.data == "account")
@@ -122,8 +154,9 @@ async def change_country_menu(callback: CallbackQuery, lang: str = "en"):
 
 @router.callback_query(F.data == "prices")
 async def show_prices(callback: CallbackQuery, lang: str = "en"):
+    text = await format_prices_markdown(lang)
     await callback.message.edit_text(
-        t("prices", lang),
+        text,
         parse_mode="Markdown",
         reply_markup=back_keyboard(lang, "account"),
     )
@@ -140,7 +173,7 @@ async def chats_menu(callback: CallbackQuery, lang: str = "en"):
 
 
 @router.callback_query(F.data == "get_all_chats")
-async def get_all_chats(callback: CallbackQuery, lang: str = "en"):
+async def get_all_chats(callback: CallbackQuery, bot: Bot, lang: str = "en"):
     user_id = callback.from_user.id
     chat_ids = await db.get_all_chat_ids(user_id, closed_only=True)
     if not chat_ids:
@@ -158,6 +191,11 @@ async def get_all_chats(callback: CallbackQuery, lang: str = "en"):
             caption=t("your_chats_file", lang),
             reply_markup=close_keyboard(lang),
         )
+        try:
+            await callback.message.delete()
+        except Exception:
+            pass
+        await send_account_page(bot, user_id, lang)
     except Exception as e:
         log.error("All chats export error: %s", e)
         lines = [f"💬 Chat #{cid}" for cid in chat_ids[-30:]]
@@ -193,6 +231,11 @@ async def export_specific_chat(callback: CallbackQuery, lang: str = "en"):
         return
 
     try:
+        await callback.message.delete()
+    except Exception:
+        pass
+
+    try:
         file_path = await export_single_chat(user_id, chat_id, lang)
         doc = FSInputFile(file_path)
         await callback.message.answer_document(
@@ -202,9 +245,16 @@ async def export_specific_chat(callback: CallbackQuery, lang: str = "en"):
         )
     except Exception as e:
         log.error("Chat export error: %s", e)
-        await callback.message.edit_text(
+        await callback.message.answer(
             t("unexpected_error", lang),
             reply_markup=back_keyboard(lang, "chats_menu"),
+        )
+
+    chat_ids = await db.get_all_chat_ids(user_id, closed_only=True)
+    if chat_ids:
+        await callback.message.answer(
+            t("enter_chat_number", lang),
+            reply_markup=chat_number_keyboard(lang, chat_ids[-10:]),
         )
 
     await callback.answer()

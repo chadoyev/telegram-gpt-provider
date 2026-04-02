@@ -7,7 +7,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import Message, CallbackQuery
 
 from app import db
-from app.billing import get_currency, get_exchange_rate
+from app.billing import get_currency, get_exchange_rate, signup_referral_bonus
 from app.keyboards import (
     language_keyboard, country_keyboard, terms_keyboard, welcome_keyboard,
 )
@@ -37,18 +37,24 @@ async def cmd_start(message: Message, db_user=None, lang: str = "en"):
         )
         if referrer:
             bs = await db.get_bot_settings()
-            bonus = float(bs["referral_bonus"])
+            ref_row = await db.get_user(referrer)
+            ref_country = ref_row["country"] if ref_row else None
+
+            bonus = signup_referral_bonus(bs, "referral_bonus", ref_country)
             if bonus > 0:
+                rcur, _ = get_currency(ref_country)
                 await db.add_balance(referrer, bonus)
                 await db.create_transaction(
-                    referrer, 2, bonus, "USD",
+                    referrer, 2, bonus, rcur,
                     description="Referral bonus", referral_id=user.id,
                 )
-            reffer_bonus = float(bs["reffer_bonus"])
-            if reffer_bonus > 0:
-                await db.add_balance(user.id, reffer_bonus)
+
+            inv_bonus = signup_referral_bonus(bs, "reffer_bonus", None)
+            if inv_bonus > 0:
+                icur, _ = get_currency(None)
+                await db.add_balance(user.id, inv_bonus)
                 await db.create_transaction(
-                    user.id, 2, reffer_bonus, "USD",
+                    user.id, 2, inv_bonus, icur,
                     description="Welcome referral bonus",
                 )
 
