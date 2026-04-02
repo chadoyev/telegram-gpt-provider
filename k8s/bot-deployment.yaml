@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: bot
-          image: your-registry/uai-robot:latest
+          image: chadoyev/uai-robot:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8443

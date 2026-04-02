@@ -129,8 +129,8 @@ uai_robot/
 #### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/uai_robot.git
-cd uai_robot
+git clone https://github.com/chadoyev/telegram-gpt-provider.git
+cd telegram-gpt-provider
 ```
 
 #### 2. Configure environment
@@ -268,6 +268,17 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 
 Both payment systems send callbacks to your server over HTTPS, which is why a domain + SSL is required.
 
+#### Test mode vs production (`TEST_MODE_PAY_SYSTEM`)
+
+Set in `.env`:
+
+| Value | Effect |
+|-------|--------|
+| `true`, `1`, `yes`, `on` | **Test mode:** Robokassa uses `IsTest=1`; YooKassa creates payments with `test: true`. Use **test** shop credentials (test login/passwords from each provider’s dashboard). |
+| `false` or unset (default) | **Production:** Robokassa `IsTest=0`; YooKassa real payments. Use **live** credentials only. |
+
+The same variable names (`ROBOKASSA_*`, `YOOKASSA_*`) always hold the credentials for the mode you are in—switch the flag **and** replace the secrets when moving from sandbox to production.
+
 #### Robokassa (KZ, UA, Other countries)
 
 1. Register at [robokassa.com](https://robokassa.com) and create a store
@@ -307,6 +318,7 @@ Both payment systems send callbacks to your server over HTTPS, which is why a do
 | `DB_USER`              | No       | `postgres`       | PostgreSQL user                                            |
 | `DB_PASSWORD`          | Yes      | —                | PostgreSQL password                                        |
 | `DB_NAME`              | No       | `uai_robot`      | PostgreSQL database name                                   |
+| `TEST_MODE_PAY_SYSTEM` | No       | `false`          | Payment sandbox: `true`/`1`/`yes`/`on` = test (`IsTest` / YooKassa `test`); use test credentials in `ROBOKASSA_*` / `YOOKASSA_*` |
 | `ROBOKASSA_LOGIN`      | No       | —                | Robokassa merchant login                                   |
 | `ROBOKASSA_PASS1`      | No       | —                | Robokassa password #1                                      |
 | `ROBOKASSA_PASS2`      | No       | —                | Robokassa password #2                                      |
@@ -336,8 +348,8 @@ Both payment systems send callbacks to your server over HTTPS, which is why a do
 #### Installation
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/uai_robot.git
-cd uai_robot
+git clone https://github.com/chadoyev/telegram-gpt-provider.git
+cd telegram-gpt-provider
 
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
@@ -369,8 +381,8 @@ python -m app
 #### 1. Build and push the Docker image
 
 ```bash
-docker build -t your-registry/uai-robot:latest .
-docker push your-registry/uai-robot:latest
+docker build -t chadoyev/uai-robot:latest .
+docker push chadoyev/uai-robot:latest
 ```
 
 #### 2. Edit secrets
@@ -535,8 +547,8 @@ uai_robot/
 #### 1. Клонировать репозиторий
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/uai_robot.git
-cd uai_robot
+git clone https://github.com/chadoyev/telegram-gpt-provider.git
+cd telegram-gpt-provider
 ```
 
 #### 2. Настроить переменные окружения
@@ -674,6 +686,17 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 
 Обе платёжные системы отправляют коллбэки на ваш сервер по HTTPS, поэтому домен с SSL-сертификатом обязателен.
 
+#### Тестовый режим и прод (`TEST_MODE_PAY_SYSTEM`)
+
+В `.env`:
+
+| Значение | Поведение |
+|----------|-----------|
+| `true`, `1`, `yes`, `on` | **Тест:** у Robokassa `IsTest=1`, у YooKassa платежи с `test: true`. В `ROBOKASSA_*` и `YOOKASSA_*` указывайте **тестовые** данные магазина из личных кабинетов. |
+| `false` или не задано (по умолчанию) | **Прод:** Robokassa `IsTest=0`, YooKassa — реальные платежи. Только **боевые** ключи и пароли. |
+
+Имена переменных те же; при переходе из песочницы в прод поменяйте флаг **и** замените секреты на продовые.
+
 #### Robokassa (Казахстан, Украина, другие страны)
 
 1. Зарегистрируйтесь на [robokassa.com](https://robokassa.com) и создайте магазин
@@ -713,6 +736,7 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 | `DB_USER`               | Нет     | `postgres`             | Пользователь PostgreSQL                                     |
 | `DB_PASSWORD`           | Да      | —                      | Пароль PostgreSQL                                           |
 | `DB_NAME`               | Нет     | `uai_robot`            | Имя базы данных                                             |
+| `TEST_MODE_PAY_SYSTEM`  | Нет     | `false`                | Тест платежей: `true`/`1`/`yes`/`on` — тестовый режим; в `ROBOKASSA_*` / `YOOKASSA_*` — тестовые кабинеты |
 | `ROBOKASSA_LOGIN`       | Нет     | —                      | Логин Robokassa                                             |
 | `ROBOKASSA_PASS1`       | Нет     | —                      | Пароль №1 Robokassa                                         |
 | `ROBOKASSA_PASS2`       | Нет     | —                      | Пароль №2 Robokassa                                         |
@@ -742,8 +766,8 @@ WEBHOOK_BASE_URL=https://bot.yourdomain.com
 #### Установка
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/uai_robot.git
-cd uai_robot
+git clone https://github.com/chadoyev/telegram-gpt-provider.git
+cd telegram-gpt-provider
 
 python -m venv venv
 source venv/bin/activate  # Linux/macOS
@@ -775,8 +799,8 @@ python -m app
 #### 1. Собрать и запушить Docker-образ
 
 ```bash
-docker build -t your-registry/uai-robot:latest .
-docker push your-registry/uai-robot:latest
+docker build -t chadoyev/uai-robot:latest .
+docker push chadoyev/uai-robot:latest
 ```
 
 #### 2. Отредактировать секреты

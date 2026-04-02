@@ -16,6 +16,13 @@ def _env(key: str, default: str | None = None, *, required: bool = False) -> str
     return val or ""
 
 
+def _env_bool(key: str, default: bool = False) -> bool:
+    v = (os.getenv(key) or "").strip().lower()
+    if not v:
+        return default
+    return v in ("1", "true", "yes", "on")
+
+
 @dataclass(frozen=True)
 class TelegramConfig:
     token: str = field(default_factory=lambda: _env("API_TOKEN", required=True))
@@ -78,6 +85,9 @@ class Settings:
     webhook_host: str = field(default_factory=lambda: _env("WEBHOOK_HOST", "0.0.0.0"))
     webhook_base_url: str = field(default_factory=lambda: _env("WEBHOOK_BASE_URL", required=True))
     webhook_secret: str = field(default_factory=lambda: _env("WEBHOOK_SECRET", ""))
+    pay_test_mode: bool = field(
+        default_factory=lambda: _env_bool("TEST_MODE_PAY_SYSTEM", False),
+    )
 
 
 settings = Settings()

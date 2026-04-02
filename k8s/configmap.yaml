@@ -12,3 +12,4 @@ data:
   WEBHOOK_PORT: "8443"
   WEBHOOK_BASE_URL: "https://your-domain.com"
   MESSAGES_DIR: "/app/users"
+  TEST_MODE_PAY_SYSTEM: "false"

@@ -30,7 +30,7 @@ def _md5(*args) -> str:
 
 def _robokassa_url(amount, order_info: str, currency: str, desc: str) -> str:
     """Build a Robokassa payment URL.  order_info = 'user_id-inv_id'."""
-    IsTest = 1
+    is_test = 1 if settings.pay_test_mode else 0
     parts = order_info.split("-")
     inv_id = parts[1]
     shp_id = f"Shp_id={parts[0]}"
@@ -40,7 +40,7 @@ def _robokassa_url(amount, order_info: str, currency: str, desc: str) -> str:
         f"?MerchantLogin={settings.robokassa.login}"
         f"&OutSum={amount}&InvoiceID={inv_id}"
         f"&OutSumCurrency={currency}&Description={desc}"
-        f"&Shp_id={parts[0]}&SignatureValue={sign}&Encoding=UTF-8&IsTest={IsTest}"
+        f"&Shp_id={parts[0]}&SignatureValue={sign}&Encoding=UTF-8&IsTest={is_test}"
     )
 
 
@@ -73,7 +73,7 @@ def _yookassa_payment(amount, currency: str, order_info: str, desc: str) -> str 
                     "vat_code": "1",
                 }],
             },
-            "test": True,
+            "test": settings.pay_test_mode,
         })
         return payment.confirmation.confirmation_url
     except Exception as e:
